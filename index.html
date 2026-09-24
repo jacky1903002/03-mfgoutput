@@ -361,7 +361,7 @@
     };
 
     // ==========================================
-    // 3. 圖表引擎 (移除 9~12 月延伸、移除數值標籤)
+    // 3. 圖表引擎 (嚴格限制 2026 只到 8 月，不顯示任何浮動數值標籤)
     // ==========================================
     function renderCharts() {
       const container = document.getElementById('charts-container');
@@ -428,16 +428,8 @@
         });
       };
 
-      // 自動尋找 2026 年有填資料的最後月份（若 9~12 月完全沒有有效大於 0 的數值，則 activeLimit 停在 8 月）
-      let maxDataMonthIndex = 7; // 預設只到 8 月 (索引 7)
-      sheet.data.forEach((r, idx) => {
-        let v = parseNum(r[k26]);
-        if (v > 0) {
-          maxDataMonthIndex = Math.max(maxDataMonthIndex, idx);
-        }
-      });
-      // 確保超過 8 月若沒資料就不強行延伸
-      let activeLimit = Math.min(maxDataMonthIndex + 1, 8);
+      // 嚴格將 2026 年的有效資料月份限制在前 8 個月 (索引 0~7，即 Jan ~ Aug)
+      const activeLimit = 8;
 
       materials.forEach((mat, idx) => {
         let rows = getMaterialRows(mat);
@@ -496,7 +488,7 @@
             { 
               label: l26, 
               data: allMonths.map((_, i) => { 
-                if (i >= activeLimit) return null;
+                if (i >= activeLimit) return null; // 超過 8 月直接設為 null
                 let v = parseNum(rows[i]?.[k26]); 
                 return v > 0 ? v : null; 
               }), 
@@ -510,10 +502,9 @@
           plugins: { 
             legend: { position: 'top' }, 
             title: { display: false, text: titleText },
-            datalabels: { display: false } // 完全關閉資料標籤
+            datalabels: { display: false } // 確保不顯示數值標籤
           }
-        },
-        plugins: [ChartDataLabels]
+        }
       });
     }
 
@@ -529,7 +520,7 @@
       const data24 = allMonths.map((_, i) => { s24 += parseNum(rows[i]?.[k24]); return s24; });
       const data25 = allMonths.map((_, i) => { s25 += parseNum(rows[i]?.[k25]); return s25; });
       
-      // 超過 activeLimit (8月) 的 2026 資料直接回傳 null，線條在 8 月就會終止
+      // 關鍵：索引 >= 8 (即 9~12 月) 的 2026 資料強制回傳 null，線條在 8 月精準斷開
       const data26 = allMonths.map((_, i) => {
         if (i >= activeLimit) return null;
         let val = parseNum(rows[i]?.[k26]);
@@ -577,10 +568,9 @@
           plugins: { 
             legend: { position: 'top' }, 
             title: { display: false },
-            datalabels: { display: false } // 完全關閉所有圖上數值標籤
+            datalabels: { display: false } // 徹底移除所有圖上的數值標籤
           }
-        },
-        plugins: [ChartDataLabels]
+        }
       });
     }
 

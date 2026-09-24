@@ -54,15 +54,12 @@
 
   <!-- 工作表標籤列 -->
   <div class="bg-slate-50 border-b px-6 py-2 flex items-center justify-between overflow-x-auto">
-    <div id="sheets-tab-container" class="flex space-x-2 items-center">
-      <!-- 動態生成工作表分頁 -->
-    </div>
+    <div id="sheets-tab-container" class="flex space-x-2 items-center"></div>
     <button onclick="window.addSheet()" class="bg-slate-800 text-white px-3 py-1.5 rounded-md text-xs font-medium hover:bg-slate-700 transition">+ 新增工作表</button>
   </div>
 
   <!-- 主內容區 -->
   <main class="flex-1 p-6 max-w-7xl mx-auto w-full space-y-6">
-    <!-- 資料表格操作列 -->
     <div class="bg-white p-4 rounded-xl shadow-sm border flex flex-wrap gap-3 items-center justify-between">
       <div class="flex items-center space-x-2">
         <button onclick="window.addRow()" class="bg-indigo-600 text-white px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-indigo-700 transition">+ 新增列</button>
@@ -73,22 +70,16 @@
       <span class="text-xs text-slate-400">提示：雙擊工作表標籤可直接修改名稱</span>
     </div>
 
-    <!-- 表格檢視區 -->
     <div class="bg-white rounded-xl shadow-sm border overflow-x-auto">
-      <table id="app-table" class="w-full text-left border-collapse">
-        <!-- 動態渲染表格內容 -->
-      </table>
+      <table id="app-table" class="w-full text-left border-collapse"></table>
     </div>
 
-    <!-- 圖表展示區 -->
-    <div id="charts-container" class="grid grid-cols-1 md:grid-cols-2 gap-6">
-      <!-- 視工作表動態載入對應圖表 -->
-    </div>
+    <div id="charts-container" class="grid grid-cols-1 md:grid-cols-2 gap-6"></div>
   </main>
 
   <script>
     // ==========================================
-    // 1. Firebase 設定與初始化 (含本地快取與重連保護)
+    // 1. Firebase 初始化與強效本地防護
     // ==========================================
     const firebaseConfig = {
       apiKey: "AIzaSyB7Oss_eMXO4i4PBs9ZziiREb4r9Ko6a74",
@@ -105,39 +96,32 @@
     const auth = firebase.auth();
     const db = firebase.database();
 
-    // 優先從瀏覽器本地快取讀取資料，防止 F5 重新整理瞬間空白
-    const localCachedState = localStorage.getItem('mfg_app_state_cache');
-    if (localCachedState) {
-      try {
-        window.appState = JSON.parse(localCachedState);
-      } catch (e) {
-        console.error("解析本地快取失敗", e);
-      }
-    } else {
-      window.appState = {
-        currentSheetId: 'sheet_1',
-        sheets: [
-          {
-            id: 'sheet_1',
-            name: '產值分析',
-            columns: [
-              { key: 'category', title: '類別' },
-              { key: 'month', title: '月份' },
-              { key: '2023', title: '2023' },
-              { key: '2024', title: '2024' },
-              { key: '2025', title: '2025' },
-              { key: '2026', title: '2026' }
-            ],
-            data: []
-          }
-        ]
-      };
-    }
+    // 預設初始狀態
+    const defaultState = {
+      currentSheetId: 'sheet_1',
+      sheets: [
+        {
+          id: 'sheet_1',
+          name: '產值分析',
+          columns: [
+            { key: 'category', title: '類別' },
+            { key: 'month', title: '月份' },
+            { key: '2023', title: '2023' },
+            { key: '2024', title: '2024' },
+            { key: '2025', title: '2025' },
+            { key: '2026', title: '2026' }
+          ],
+          data: []
+        }
+      ]
+    };
 
+    // 優先讀取 LocalStorage 快取，確保 F5 絕對不消失
+    const localCachedState = localStorage.getItem('mfg_app_state_cache');
+    window.appState = localCachedState ? JSON.parse(localCachedState) : defaultState;
     window.isAuthorizedEditor = false;
     window.chartInstances = {};
 
-    // 驗證狀態監聽
     auth.onAuthStateChanged(user => {
       if (user) {
         window.isAuthorizedEditor = true;
@@ -169,23 +153,22 @@
 
     function autoSaveToFirebase() {
       if (!window.isAuthorizedEditor) return;
-      // 同時寫入本地快取與雲端 Firebase
       localStorage.setItem('mfg_app_state_cache', JSON.stringify(window.appState));
       db.ref('mfg_app_state').set(window.appState);
     }
 
     function loadFromFirebase() {
-      // 改用 on('value') 即時監聽，重連或雲端變動時會自動更新
       db.ref('mfg_app_state').on('value', snapshot => {
         const val = snapshot.val();
-        if (val && val.sheets) {
+        if (val && val.sheets && val.sheets.length > 0) {
+          // 只有當雲端有實質資料時才覆蓋，避免重連時抓到空資料
           window.appState = val;
           localStorage.setItem('mfg_app_state_cache', JSON.stringify(window.appState));
-          renderApp();
         } else {
+          // 如果雲端是空的，就把本地現有的上傳上去保護資料
           autoSaveToFirebase();
-          renderApp();
         }
+        renderApp();
       });
     }
 
@@ -275,7 +258,6 @@
       const table = document.getElementById('app-table');
       table.innerHTML = '';
 
-      // 表頭
       const thead = document.createElement('thead');
       thead.className = 'bg-slate-50 border-b text-slate-600 text-xs uppercase tracking-wider';
       let headerTr = document.createElement('tr');
@@ -288,7 +270,6 @@
       thead.appendChild(headerTr);
       table.appendChild(thead);
 
-      // 表身
       const tbody = document.createElement('tbody');
       tbody.className = 'divide-y divide-slate-100 text-sm';
       sheet.data.forEach((row, rowIdx) => {
@@ -365,7 +346,7 @@
     };
 
     // ==========================================
-    // 3. 圖表動態生成引擎
+    // 3. 圖表引擎 (完美限制 2026 僅到有資料的月份)
     // ==========================================
     function renderCharts() {
       const container = document.getElementById('charts-container');
@@ -426,7 +407,7 @@
         });
       };
 
-      // 自動偵測 2026 年實際有資料的最後一個月份索引
+      // 精準計算 2026 實際有資料的最後一個月份索引
       let maxDataMonthIndex = 7; // 預設 8 月 (索引 7)
       let sampleRows = sheet.data;
       if (sampleRows.length > 0) {
@@ -442,7 +423,6 @@
         }
       }
 
-      // 截斷月份，讓 2026 年只顯示到有資料的月份為止
       const activeMonthsCount = Math.max(8, maxDataMonthIndex + 1);
       const months = allMonths.slice(0, activeMonthsCount);
 
@@ -473,9 +453,9 @@
 
       materials.forEach((mat, idx) => {
         let rows = getMaterialRows(mat).slice(0, activeMonthsCount);
-        drawCumulativeLineChart(`sc${idx+5}`, rows, `${mat}累積產值`, k23, k24, k25, k26);
+        drawCumulativeLineChart(`sc${idx+5}`, rows, `${mat}累積產值`, k23, k24, k25, k26, maxDataMonthIndex);
       });
-      drawCumulativeLineChart('sc8', getCombinedRows(), '合計累積產值', k23, k24, k25, k26);
+      drawCumulativeLineChart('sc8', getCombinedRows(), '合計累積產值', k23, k24, k25, k26, maxDataMonthIndex);
     }
 
     function drawBarComparisonChart(chartId, rows, titleText, k23, k24, k25, k26) {
@@ -492,7 +472,7 @@
             { label: '2023', data: rows.map(r => parseNum(r[k23])), backgroundColor: '#10b981' },
             { label: '2024', data: rows.map(r => parseNum(r[k24])), backgroundColor: '#3b82f6' },
             { label: '2025', data: rows.map(r => parseNum(r[k25])), backgroundColor: '#f59e0b' },
-            { label: '2026', data: rows.map(r => parseNum(r[k26])), backgroundColor: '#ef4444' }
+            { label: '2026', data: rows.map(r => (parseNum(r[k26]) > 0 ? parseNum(r[k26]) : null)), backgroundColor: '#ef4444' }
           ]
         },
         options: {
@@ -503,7 +483,7 @@
       });
     }
 
-    function drawCumulativeLineChart(chartId, rows, titleText, k23, k24, k25, k26) {
+    function drawCumulativeLineChart(chartId, rows, titleText, k23, k24, k25, k26, maxDataMonthIndex) {
       const canvas = document.getElementById(`canvas-${chartId}`);
       if (!canvas) return;
       if (window.chartInstances[chartId]) window.chartInstances[chartId].destroy();
@@ -514,7 +494,14 @@
       const data23 = rows.map(r => { sum23 += parseNum(r[k23]); return sum23; });
       const data24 = rows.map(r => { sum24 += parseNum(r[k24]); return sum24; });
       const data25 = rows.map(r => { sum25 += parseNum(r[k25]); return sum25; });
-      const data26 = rows.map(r => { sum26 += parseNum(r[k26]); return sum26; });
+      
+      // 關鍵修正：2026 年累積產值超過有資料的月份後強制回傳 null，線條即會自動中斷
+      const data26 = rows.map((r, idx) => {
+        if (idx > maxDataMonthIndex) return null;
+        let val = parseNum(r[k26]);
+        sum26 += val;
+        return sum26;
+      });
 
       window.chartInstances[chartId] = new Chart(canvas, {
         type: 'line',
@@ -524,7 +511,7 @@
             { label: '2023', data: data23, borderColor: '#10b981', backgroundColor: '#10b981', tension: 0.1 },
             { label: '2024', data: data24, borderColor: '#3b82f6', backgroundColor: '#3b82f6', tension: 0.1 },
             { label: '2025', data: data25, borderColor: '#f59e0b', backgroundColor: '#f59e0b', tension: 0.1 },
-            { label: '2026', data: data26, borderColor: '#ef4444', backgroundColor: '#ef4444', tension: 0.1 }
+            { label: '2026', data: data26, borderColor: '#ef4444', backgroundColor: '#ef4444', tension: 0.1, spanGaps: false }
           ]
         },
         options: {
@@ -558,7 +545,7 @@
         const data = new Uint8Array(e.target.result);
         const workbook = XLSX.read(data, { type: 'array' });
         const sheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[sheetName];
+        const worksheet = workbook.Sheets[workbook.SheetNames[0]];
         const json = XLSX.utils.sheet_to_json(worksheet);
         
         if (json.length > 0) {

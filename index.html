@@ -17,6 +17,9 @@
   <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
+  <style>
+    .no-export { /* 截圖時自動隱藏 */ }
+  </style>
 </head>
 <body class="bg-slate-100 text-slate-800 min-h-screen flex flex-col">
 
@@ -119,10 +122,20 @@
           name: '線上WIP',
           columns: [
             { key: 'category', title: '類別' },
-            { key: 'month', title: '月份' },
-            { key: 'val', title: '數值' }
+            { key: 'd1', title: '2026/5/1' },
+            { key: 'd2', title: '2026/5/2' },
+            { key: 'd3', title: '2026/5/3' },
+            { key: 'd4', title: '2026/6/1' }
           ],
-          data: []
+          data: [
+            { category: '線切割', d1: 9801, d2: 7815, d3: 9490, d4: 8500 },
+            { category: '金屬一課', d1: 9871, d2: 8246, d3: 10229, d4: 9200 },
+            { category: '金屬二課', d1: 9780, d2: 8894, d3: 10461, d4: 8800 },
+            { category: '車床課', d1: 10757, d2: 7295, d3: 9952, d4: 9100 },
+            { category: '最終檢驗', d1: 10404, d2: 10609, d3: 8778, d4: 9400 },
+            { category: '表面處理', d1: 9748, d2: 10142, d3: 8946, d4: 8900 },
+            { category: '後處理', d1: 7258, d2: 10706, d3: 10342, d4: 9600 }
+          ]
         },
         {
           id: 'sheet_3',
@@ -130,15 +143,11 @@
           columns: [
             { key: 'category', title: '類別' },
             { key: 'm1', title: 'May-25' },
-            { key: 'm2', title: 'Jun-25' },
-            { key: 'm3', title: 'Jul-25' },
-            { key: 'm4', title: 'Aug-25' },
-            { key: 'm5', title: 'Sep-25' }
+            { key: 'm2', title: 'Jun-25' }
           ],
           data: [
-            { category: '石墨', m1: 8489, m2: 8474, m3: 10623, m4: 10722, m5: 10029 },
-            { category: '複材', m1: 10582, m2: 8292, m3: 10028, m4: 9038, m5: 9784 },
-            { category: '石墨加複材', m1: 19071, m2: 16766, m3: 20651, m4: 19760, m5: 19813 }
+            { category: '石墨', m1: 8489, m2: 8474 },
+            { category: '複材', m1: 10582, m2: 8292 }
           ]
         }
       ]
@@ -271,8 +280,8 @@
         name: '新工作表 ' + (window.appState.sheets.length + 1),
         columns: [
           { key: 'category', title: '類別' },
-          { key: 'm1', title: 'May-25' },
-          { key: 'm2', title: 'Jun-25' }
+          { key: 'm1', title: '2026/5/1' },
+          { key: 'm2', title: '2026/5/2' }
         ],
         data: []
       });
@@ -310,21 +319,6 @@
       thead.appendChild(headerTr);
       table.appendChild(thead);
 
-      let colExtremes = {};
-      if (sheetIndex === 1) {
-        sheet.columns.forEach((col, cIdx) => {
-          if (cIdx >= 1) {
-            let vals = sheet.data.map(row => parseNum(row[col.key])).filter(v => v !== 0);
-            if (vals.length > 0) {
-              colExtremes[col.key] = {
-                min: Math.min(...vals),
-                max: Math.max(...vals)
-              };
-            }
-          }
-        });
-      }
-
       const tbody = document.createElement('tbody');
       tbody.className = 'divide-y divide-slate-100 text-sm';
       sheet.data.forEach((row, rowIdx) => {
@@ -333,29 +327,6 @@
           let td = document.createElement('td');
           td.className = 'px-4 py-2.5 transition-colors duration-200';
           let val = row[col.key] !== undefined ? row[col.key] : '';
-
-          if (sheetIndex === 1 && cIdx >= 1 && colExtremes[col.key]) {
-            let numVal = parseNum(val);
-            let { min, max } = colExtremes[col.key];
-            if (max !== min && numVal > 0) {
-              let ratio = (numVal - min) / (max - min);
-              let r, g, b;
-              if (ratio <= 0.5) {
-                let subRatio = ratio * 2;
-                r = Math.round(134 + (254 - 134) * subRatio);
-                g = Math.round(239 + (240 - 239) * subRatio);
-                b = Math.round(172 + (138 - 172) * subRatio);
-              } else {
-                let subRatio = (ratio - 0.5) * 2;
-                r = Math.round(254 + (239 - 254) * subRatio);
-                g = Math.round(240 + (68 - 240) * subRatio);
-                b = Math.round(138 + (68 - 138) * subRatio);
-              }
-              td.style.backgroundColor = `rgb(${r}, ${g}, ${b})`;
-            } else if (numVal > 0 && max === min) {
-              td.style.backgroundColor = 'rgb(187, 247, 208)';
-            }
-          }
 
           td.innerHTML = `<input type="text" value="${val}" onchange="window.updateCell(${rowIdx}, '${col.key}', this.value)" class="w-full bg-transparent border-b border-transparent focus:border-blue-500 focus:bg-white focus:outline-none px-1 py-0.5">`;
           tr.appendChild(td);
@@ -388,7 +359,7 @@
     window.addColumn = function() {
       if (!window.isAuthorizedEditor) { alert("需要管理者權限！"); return; }
       const sheet = window.appState.sheets.find(s => s.id === window.appState.currentSheetId);
-      const colTitle = prompt("請輸入新欄位標題 (例如 Oct-25)：");
+      const colTitle = prompt("請輸入新欄位日期 (例如 2026/5/4)：");
       if (!colTitle) return;
       const colKey = 'col_' + Date.now();
       sheet.columns.push({ key: colKey, title: colTitle });
@@ -425,7 +396,7 @@
     };
 
     // ==========================================
-    // 3. 圖表引擎
+    // 3. 圖表與熱力表引擎
     // ==========================================
     function renderCharts() {
       const container = document.getElementById('charts-container');
@@ -444,7 +415,7 @@
           wrapper.innerHTML = `
             <div class="flex justify-between items-center mb-4">
               <h3 id="title-${id}" class="font-semibold text-slate-700 text-sm">${chartTitles[idx]}</h3>
-              <button onclick="window.exportChartToPNG('${id}', '${chartTitles[idx]}')" class="text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 px-2.5 py-1 rounded transition">匯出圖片</button>
+              <button onclick="window.exportChartToPNG('${id}', '${chartTitles[idx]}')" class="export-btn text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 px-2.5 py-1 rounded transition">匯出圖片</button>
             </div>
             <div class="relative h-72 w-full">
               <canvas id="canvas-${id}"></canvas>
@@ -455,6 +426,25 @@
 
         if (sheet) buildAllEightComparisonCharts(sheet);
 
+      } else if (sheetIndex === 1) {
+        // 第二個工作表：WIP 每月平均熱力表
+        const wrapper = document.createElement('div');
+        wrapper.className = 'bg-white p-6 rounded-xl shadow-sm border flex flex-col md:col-span-2';
+        wrapper.id = `export-area-sheet2-heatmap`;
+        wrapper.innerHTML = `
+          <div class="flex justify-between items-center mb-4">
+            <div>
+              <h3 class="font-bold text-slate-800 text-lg">線上WIP - 每月平均熱力表</h3>
+              <p class="text-xs text-slate-500 mt-0.5">自動將每日數據（如 2026/5/1）彙整為各月份平均，並以顏色深淺呈現各部門表現</p>
+            </div>
+            <button onclick="window.exportChartToPNG('sheet2-heatmap', 'WIP每月平均熱力表')" class="export-btn text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 px-3 py-1.5 rounded transition">匯出圖片</button>
+          </div>
+          <div id="heatmap-container" class="overflow-x-auto w-full"></div>
+        `;
+        container.appendChild(wrapper);
+
+        buildWipMonthlyHeatmap(sheet);
+
       } else if (sheetIndex === 2) {
         const wrapper = document.createElement('div');
         wrapper.className = 'bg-white p-5 rounded-xl shadow-sm border flex flex-col md:col-span-2';
@@ -462,7 +452,7 @@
         wrapper.innerHTML = `
           <div class="flex justify-between items-center mb-4">
             <h3 class="font-semibold text-slate-700 text-base">${sheet.name} - 趨勢圖</h3>
-            <button onclick="window.exportChartToPNG('sheet3', '${sheet.name}')" class="text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 px-2.5 py-1 rounded transition">匯出圖片</button>
+            <button onclick="window.exportChartToPNG('sheet3', '${sheet.name}')" class="export-btn text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 px-2.5 py-1 rounded transition">匯出圖片</button>
           </div>
           <div class="relative h-96 w-full">
             <canvas id="canvas-sheet3"></canvas>
@@ -481,29 +471,120 @@
       return isNaN(n) ? 0 : n;
     }
 
+    // 建立 WIP 每月平均熱力表
+    function buildWipMonthlyHeatmap(sheet) {
+      const container = document.getElementById('heatmap-container');
+      if (!container) return;
+
+      let monthMap = {}; 
+      let monthList = [];
+
+      for (let i = 1; i < sheet.columns.length; i++) {
+        let col = sheet.columns[i];
+        let title = col.title.trim();
+        let parts = title.split(/[\/\-]/);
+        if (parts.length >= 2) {
+          let year = parts[0];
+          let month = parts[1].padStart(2, '0');
+          let yearMonthKey = `${year}/${month}`;
+          if (!monthMap[yearMonthKey]) {
+            monthMap[yearMonthKey] = [];
+            monthList.push(yearMonthKey);
+          }
+          monthMap[yearMonthKey].push(col.key);
+        }
+      }
+
+      monthList.sort();
+
+      if (monthList.length === 0) {
+        container.innerHTML = `<p class="text-sm text-slate-400 py-6 text-center">欄位標題未包含有效日期格式 (例如 2026/5/1)，無法計算月平均。</p>`;
+        return;
+      }
+
+      let processedData = [];
+      let allCellValues = [];
+
+      sheet.data.forEach(row => {
+        let catName = String(row[sheet.columns[0].key] || '未命名').trim();
+        let rowObj = { category: catName };
+
+        monthList.forEach(ym => {
+          let colKeys = monthMap[ym];
+          let sum = 0;
+          let count = 0;
+          colKeys.forEach(ck => {
+            let val = parseNum(row[ck]);
+            if (val > 0) {
+              sum += val;
+              count++;
+            }
+          });
+          let avg = count > 0 ? Math.round(sum / count) : 0;
+          rowObj[ym] = avg;
+          if (avg > 0) allCellValues.push(avg);
+        });
+        processedData.push(rowObj);
+      });
+
+      let minVal = allCellValues.length > 0 ? Math.min(...allCellValues) : 0;
+      let maxVal = allCellValues.length > 0 ? Math.max(...allCellValues) : 100;
+
+      let html = `<table class="w-full text-left border-collapse text-sm">
+        <thead>
+          <tr class="bg-slate-50 border-b text-slate-600 text-xs uppercase">
+            <th class="px-4 py-3 font-semibold border-r">類別 / 月份平均</th>`;
+      
+      monthList.forEach(ym => {
+        let [y, m] = ym.split('/');
+        html += `<th class="px-4 py-3 font-semibold text-center">${y}年${parseInt(m)}月 平均</th>`;
+      });
+      html += `</tr></thead><tbody class="divide-y divide-slate-100">`;
+
+      processedData.forEach(row => {
+        html += `<tr class="hover:bg-slate-50/50"><td class="px-4 py-3 font-medium text-slate-700 border-r bg-slate-50/30">${row.category}</td>`;
+        
+        monthList.forEach(ym => {
+          let val = row[ym];
+          let bgStyle = 'background-color: transparent;';
+          if (val > 0 && maxVal !== minVal) {
+            let ratio = (val - minVal) / (maxVal - minVal);
+            let r = Math.round(239 + (254 - 239) * ratio);
+            let g = Math.round(246 + (202 - 246) * ratio);
+            let b = Math.round(228 + (202 - 228) * ratio);
+            bgStyle = `background-color: rgb(${r}, ${g}, ${b});`;
+          } else if (val > 0) {
+            bgStyle = `background-color: rgb(254, 226, 226);`;
+          }
+
+          html += `<td class="px-4 py-3 text-center font-semibold" style="${bgStyle}">${val > 0 ? val.toLocaleString() : '-'}</td>`;
+        });
+        html += `</tr>`;
+      });
+
+      html += `</tbody></table>`;
+      container.innerHTML = html;
+    }
+
     function buildWideTableLineChart(sheet) {
       const canvas = document.getElementById('canvas-sheet3');
       if (!canvas) return;
       if (window.chartInstances['sheet3']) window.chartInstances['sheet3'].destroy();
 
-      // X 軸：從第 2 個欄位開始到最後，取其標題（例如 May-25, Jun-25 ...）作為 X 軸時間標籤
       let timeLabels = [];
       for (let i = 1; i < sheet.columns.length; i++) {
         timeLabels.push(sheet.columns[i].title);
       }
 
-      // 每一列代表一個類別（石墨、複材、石墨加複材）
       const colorMap = {
-        '石墨': '#3b82f6',     // 藍色
-        '複材': '#f97316',     // 橘色
-        '石墨加複材': '#6b7280' // 灰色
+        '石墨': '#3b82f6',
+        '複材': '#f97316',
+        '石墨加複材': '#6b7280'
       };
       const fallbackColors = ['#3b82f6', '#f97316', '#6b7280', '#10b981', '#ef4444', '#8b5cf6'];
 
       const datasets = sheet.data.map((row, idx) => {
         const catName = String(row[sheet.columns[0].key] || `類別${idx+1}`).trim();
-        
-        // 抓取該列在各個月份欄位對應的數值
         const dataVals = [];
         for (let i = 1; i < sheet.columns.length; i++) {
           let colKey = sheet.columns[i].key;
@@ -526,25 +607,14 @@
 
       window.chartInstances['sheet3'] = new Chart(canvas, {
         type: 'line',
-        data: {
-          labels: timeLabels,
-          datasets: datasets
-        },
+        data: { labels: timeLabels, datasets: datasets },
         options: {
           responsive: true,
           maintainAspectRatio: false,
-          plugins: {
-            legend: { position: 'bottom' },
-            title: { display: false }
-          },
+          plugins: { legend: { position: 'bottom' }, title: { display: false } },
           scales: {
-            y: {
-              beginAtZero: true,
-              grid: { color: '#f1f5f9' }
-            },
-            x: {
-              grid: { display: false }
-            }
+            y: { beginAtZero: true, grid: { color: '#f1f5f9' } },
+            x: { grid: { display: false } }
           }
         },
         plugins: [ChartDataLabels]
@@ -570,12 +640,8 @@
         return sheet.data.filter(r => {
           let cat = String(r.category || r[sheet.columns[0].key] || '').trim().toLowerCase();
           let mLower = mat.toLowerCase();
-          if (mLower === "鎢鉬鉭") {
-            return cat.includes("鎢鉬鉭") || cat.includes("鎢鉬鈕");
-          }
-          if (mLower === "other") {
-            return cat.includes("other") || cat.includes("其他");
-          }
+          if (mLower === "鎢鉬鉭") return cat.includes("鎢鉬鉭") || cat.includes("鎢鉬鈕");
+          if (mLower === "other") return cat.includes("other") || cat.includes("其他");
           return cat.includes(mLower);
         });
       };
@@ -630,51 +696,21 @@
         data: {
           labels: activeMonths,
           datasets: [
+            { label: l23, data: activeMonths.map((_, i) => parseNum(rows[i]?.[k23])), backgroundColor: '#10b981', datalabels: { display: false } },
+            { label: l24, data: activeMonths.map((_, i) => parseNum(rows[i]?.[k24])), backgroundColor: '#3b82f6', datalabels: { display: false } },
+            { label: l25, data: activeMonths.map((_, i) => parseNum(rows[i]?.[k25])), backgroundColor: '#f59e0b', datalabels: { display: false } },
             { 
-              label: l23, 
-              data: activeMonths.map((_, i) => parseNum(rows[i]?.[k23])), 
-              backgroundColor: '#10b981',
-              datalabels: { display: false }
-            },
-            { 
-              label: l24, 
-              data: activeMonths.map((_, i) => parseNum(rows[i]?.[k24])), 
-              backgroundColor: '#3b82f6',
-              datalabels: { display: false }
-            },
-            { 
-              label: l25, 
-              data: activeMonths.map((_, i) => parseNum(rows[i]?.[k25])), 
-              backgroundColor: '#f59e0b',
-              datalabels: { display: false }
-            },
-            { 
-              label: l26, 
-              data: activeMonths.map((_, i) => parseNum(rows[i]?.[k26])), 
-              backgroundColor: '#ef4444',
+              label: l26, data: activeMonths.map((_, i) => parseNum(rows[i]?.[k26])), backgroundColor: '#ef4444',
               datalabels: {
-                display: function(context) {
-                  return context.dataIndex === activeMonths.length - 1;
-                },
-                align: 'end',
-                anchor: 'end',
-                formatter: function() {
-                  return '📍';
-                },
-                color: '#ef4444',
-                font: { size: 14 }
+                display: function(context) { return context.dataIndex === activeMonths.length - 1; },
+                align: 'end', anchor: 'end',
+                formatter: function() { return '📍'; },
+                color: '#ef4444', font: { size: 14 }
               }
             }
           ]
         },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: { 
-            legend: { position: 'top' }, 
-            title: { display: false, text: titleText }
-          }
-        },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'top' }, title: { display: false } } },
         plugins: [ChartDataLabels]
       });
     }
@@ -690,16 +726,10 @@
       const data25 = activeMonths.map((_, i) => { s25 += parseNum(rows[i]?.[k25]); return s25; });
       const data26 = activeMonths.map((_, i) => { s26 += parseNum(rows[i]?.[k26]); return s26; });
 
-      const totals = [
-        { year: l23, val: s23 },
-        { year: l24, val: s24 },
-        { year: l25, val: s25 },
-        { year: l26, val: s26 }
-      ];
+      const totals = [{ year: l23, val: s23 }, { year: l24, val: s24 }, { year: l25, val: s25 }, { year: l26, val: s26 }];
       totals.sort((a, b) => b.val - a.val);
 
       const yoyVal = s25 > 0 ? ((s26 - s25) / s25 * 100).toFixed(1) : 0;
-
       const titleEl = document.getElementById(`title-${chartId}`);
       if (titleEl) {
         titleEl.innerHTML = `${titleText} &nbsp;|&nbsp; <span class="text-xs text-blue-600 font-bold">Top1:${totals[0].year}</span> <span class="text-xs text-slate-500">(YoY: ${yoyVal}%)</span>`;
@@ -724,11 +754,7 @@
             }
           ]
         },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: { legend: { position: 'top' }, title: { display: false } }
-        },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'top' }, title: { display: false } } },
         plugins: [ChartDataLabels]
       });
     }
@@ -755,7 +781,7 @@
       reader.onload = async function(e) {
         const data = new Uint8Array(e.target.result);
         const workbook = XLSX.read(data, { type: 'array' });
-        const sheetName = workbook.SheetNames[2] || workbook.SheetNames[0]; // 預讀第三個工作表
+        const sheetName = workbook.SheetNames[1] || workbook.SheetNames[0]; 
         const worksheet = workbook.Sheets[sheetName];
         const json = XLSX.utils.sheet_to_json(worksheet);
         
@@ -768,7 +794,7 @@
             return rObj;
           });
 
-          const currentSheet = window.appState.sheets.find(s => s.id === window.appState.currentSheetId) || window.appState.sheets[2];
+          const currentSheet = window.appState.sheets.find(s => s.id === window.appState.currentSheetId) || window.appState.sheets[1];
           currentSheet.columns = columns;
           currentSheet.data = sheetData;
           
@@ -783,12 +809,25 @@
     window.exportChartToPNG = function(chartId, title) {
       const element = document.getElementById(`export-area-${chartId}`);
       if (!element) return;
-      html2canvas(element, { scale: 2 }).then(canvas => {
+      
+      // 截圖前暫時隱藏「匯出圖片」按鈕
+      const btn = element.querySelector('.export-btn');
+      if (btn) btn.style.display = 'none';
+
+      html2canvas(element, { 
+        scale: 3, // 提高 3 倍解析度，使匯出的 PNG 畫質非常清晰、跟網頁一模一樣
+        useCORS: true,
+        backgroundColor: '#ffffff'
+      }).then(canvas => {
+        if (btn) btn.style.display = ''; // 恢復按鈕顯示
         const link = document.createElement('a');
         link.download = `${title}.png`;
-        link.href = canvas.toDataURL('image/png');
+        link.href = canvas.toDataURL('image/png', 1.0);
         link.click();
-      }).catch(() => alert("匯出圖片失敗！"));
+      }).catch(() => {
+        if (btn) btn.style.display = '';
+        alert("匯出圖片失敗！");
+      });
     };
   </script>
 </body>

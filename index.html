@@ -361,7 +361,7 @@
     };
 
     // ==========================================
-    // 3. 圖表引擎 (完美鎖定 2026 有效月進行同期排名與 YoY)
+    // 3. 圖表引擎 (強制限制 Top1 與 YoY 抓取同期 1~8 月)
     // ==========================================
     function renderCharts() {
       const container = document.getElementById('charts-container');
@@ -434,7 +434,7 @@
           maxDataMonthIndex = Math.max(maxDataMonthIndex, idx);
         }
       });
-      const activeLimit = maxDataMonthIndex + 1;
+      const activeLimit = maxDataMonthIndex + 1; // 8
 
       materials.forEach((mat, idx) => {
         let rows = getMaterialRows(mat);
@@ -516,7 +516,7 @@
 
       const allMonths = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
       
-      // 1. 各年度累積線條計算
+      // 1. 各年度完整 12 個月的累積線條
       let s23 = 0, s24 = 0, s25 = 0, s26 = 0;
       const data23 = allMonths.map((_, i) => { s23 += parseNum(rows[i]?.[k23]); return s23; });
       const data24 = allMonths.map((_, i) => { s24 += parseNum(rows[i]?.[k24]); return s24; });
@@ -530,27 +530,27 @@
         return s26;
       });
 
-      // 2. 嚴格同期比較：各年度一律只加總到 2026 有效的最後月份 (activeLimit)，以進行公平的 Top1 排名
-      let rankSum23 = 0, rankSum24 = 0, rankSum25 = 0, rankSum26 = 0;
+      // 2. 【關鍵修復】Top1 排名：各年度一律嚴格只加總到 2026 有效的最後月份 (1~8月)，以進行公平的同期比拼
+      let periodSum23 = 0, periodSum24 = 0, periodSum25 = 0, periodSum26 = 0;
       for (let i = 0; i < activeLimit; i++) {
-        rankSum23 += parseNum(rows[i]?.[k23]);
-        rankSum24 += parseNum(rows[i]?.[k24]);
-        rankSum25 += parseNum(rows[i]?.[k25]);
-        rankSum26 += parseNum(rows[i]?.[k26]);
+        periodSum23 += parseNum(rows[i]?.[k23]);
+        periodSum24 += parseNum(rows[i]?.[k24]);
+        periodSum25 += parseNum(rows[i]?.[k25]);
+        periodSum26 += parseNum(rows[i]?.[k26]);
       }
 
       const totals = [
-        { year: '2023', val: rankSum23 },
-        { year: '2024', val: rankSum24 },
-        { year: '2025', val: rankSum25 },
-        { year: '2026', val: rankSum26 }
+        { year: '2023', val: periodSum23 },
+        { year: '2024', val: periodSum24 },
+        { year: '2025', val: periodSum25 },
+        { year: '2026', val: periodSum26 }
       ];
       totals.sort((a, b) => b.val - a.val);
 
-      // 3. 正确計算 YoY：以 2026 同期累積比對 2025 同期累積
-      const yoy26 = rankSum25 > 0 ? ((rankSum26 - rankSum25) / rankSum25 * 100).toFixed(1) : 0;
+      // 3. YoY 計算：以 2026 同期 (1-8月) 比對 2025 同期 (1-8月)
+      const yoy26 = periodSum25 > 0 ? ((periodSum26 - periodSum25) / periodSum25 * 100).toFixed(1) : 0;
 
-      // 更新標題列（顯示正確的 Top1 與正確的同期 YoY 成長率）
+      // 更新標題列
       const titleEl = document.getElementById(`title-${chartId}`);
       if (titleEl) {
         titleEl.innerHTML = `${titleText} &nbsp;|&nbsp; <span class="text-xs text-blue-600 font-bold">Top1:${totals[0].year}</span> <span class="text-xs text-slate-500">(26 YoY: ${yoy26}%)</span>`;
@@ -576,7 +576,6 @@
             datalabels: {
               align: 'top',
               formatter: (value, context) => {
-                // 只在資料最後一個有效月份顯示標籤，避免 12 月出現錯誤數值
                 if (value !== null && context.dataIndex === activeLimit - 1 && context.dataset.label === '2026') {
                   return (value / 1000000).toFixed(1) + 'M';
                 }

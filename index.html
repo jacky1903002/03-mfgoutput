@@ -286,7 +286,6 @@
       thead.appendChild(headerTr);
       table.appendChild(thead);
 
-      // 若為第二個工作表以後（索引 > 0），自動計算所有數值欄位的最大值與最小值
       let colExtremes = {};
       if (sheetIndex > 0) {
         sheet.columns.forEach((col, cIdx) => {
@@ -522,18 +521,33 @@
         data: {
           labels: activeMonths,
           datasets: [
-            { label: l23, data: activeMonths.map((_, i) => parseNum(rows[i]?.[k23])), backgroundColor: '#10b981' },
-            { label: l24, data: activeMonths.map((_, i) => parseNum(rows[i]?.[k24])), backgroundColor: '#3b82f6' },
-            { label: l25, data: activeMonths.map((_, i) => parseNum(rows[i]?.[k25])), backgroundColor: '#f59e0b' },
+            { 
+              label: l23, 
+              data: activeMonths.map((_, i) => parseNum(rows[i]?.[k23])), 
+              backgroundColor: '#10b981',
+              datalabels: { display: false } // 完全關閉數字
+            },
+            { 
+              label: l24, 
+              data: activeMonths.map((_, i) => parseNum(rows[i]?.[k24])), 
+              backgroundColor: '#3b82f6',
+              datalabels: { display: false } // 完全關閉數字
+            },
+            { 
+              label: l25, 
+              data: activeMonths.map((_, i) => parseNum(rows[i]?.[k25])), 
+              backgroundColor: '#f59e0b',
+              datalabels: { display: false } // 完全關閉數字
+            },
             { 
               label: l26, 
               data: activeMonths.map((_, i) => parseNum(rows[i]?.[k26])), 
               backgroundColor: '#ef4444',
               datalabels: {
+                display: true, // 只有最新年份開啟
                 align: 'end',
                 anchor: 'end',
                 formatter: function(value, context) {
-                  // 只有最後一個月份才顯示 we are here 標籤，其餘一律不顯示數字
                   return context.dataIndex === activeMonths.length - 1 ? '📍 we are here' : '';
                 },
                 color: '#ef4444',
@@ -588,9 +602,18 @@
         data: {
           labels: activeMonths,
           datasets: [
-            { label: l23, data: data23, borderColor: '#10b981', backgroundColor: '#10b981', tension: 0.1 },
-            { label: l24, data: data24, borderColor: '#3b82f6', backgroundColor: '#3b82f6', tension: 0.1 },
-            { label: l25, data: data25, borderColor: '#f59e0b', backgroundColor: '#f59e0b', tension: 0.1 },
+            { 
+              label: l23, data: data23, borderColor: '#10b981', backgroundColor: '#10b981', tension: 0.1,
+              datalabels: { display: false }
+            },
+            { 
+              label: l24, data: data24, borderColor: '#3b82f6', backgroundColor: '#3b82f6', tension: 0.1,
+              datalabels: { display: false }
+            },
+            { 
+              label: l25, data: data25, borderColor: '#f59e0b', backgroundColor: '#f59e0b', tension: 0.1,
+              datalabels: { display: false }
+            },
             { 
               label: l26, 
               data: data26, 
@@ -598,10 +621,10 @@
               backgroundColor: '#ef4444', 
               tension: 0.1,
               datalabels: {
+                display: true,
                 align: 'top',
                 anchor: 'end',
                 formatter: function(value, context) {
-                  // 只有最後一個月份才顯示 we are here 標籤，其餘不顯示
                   return context.dataIndex === activeMonths.length - 1 ? '📍 we are here' : '';
                 },
                 color: '#ef4444',

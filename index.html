@@ -7,6 +7,8 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- Chart.js -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- Chart.js DataLabels Plugin -->
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
   <!-- SheetJS (Excel 匯入匯出) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <!-- html2canvas (圖表匯出 PNG) -->
@@ -267,7 +269,8 @@
     };
 
     function renderTable() {
-      const sheet = window.appState.sheets.find(s => s.id === window.appState.currentSheetId) || window.appState.sheets[0];
+      const sheetIndex = window.appState.sheets.findIndex(s => s.id === window.appState.currentSheetId);
+      const sheet = window.appState.sheets[sheetIndex] || window.appState.sheets[0];
       const table = document.getElementById('app-table');
       table.innerHTML = '';
 
@@ -283,14 +286,48 @@
       thead.appendChild(headerTr);
       table.appendChild(thead);
 
+      // 若為第二個工作表以後（例如索引 > 0），計算各欄位的最大值與最小值以支援熱力圖
+      let colExtremes = {};
+      if (sheetIndex > 0) {
+        sheet.columns.forEach((col, cIdx) => {
+          if (cIdx >= 2) { // 從第 3 欄開始計算數值範圍
+            let vals = sheet.data.map(row => parseNum(row[col.key])).filter(v => v !== 0);
+            if (vals.length > 0) {
+              colExtremes[col.key] = {
+                min: Math.min(...vals),
+                max: Math.max(...vals)
+              };
+            }
+          }
+        });
+      }
+
       const tbody = document.createElement('tbody');
       tbody.className = 'divide-y divide-slate-100 text-sm';
       sheet.data.forEach((row, rowIdx) => {
         let tr = document.createElement('tr');
-        sheet.columns.forEach(col => {
+        sheet.columns.forEach((col, cIdx) => {
           let td = document.createElement('td');
-          td.className = 'px-4 py-2.5';
+          td.className = 'px-4 py-2.5 transition-colors duration-200';
           let val = row[col.key] !== undefined ? row[col.key] : '';
+
+          // 若為第二個工作表且為數值欄位，計算熱力圖背景色
+          if (sheetIndex > 0 && cIdx >= 2 && colExtremes[col.key]) {
+            let numVal = parseNum(val);
+            let { min, max } = colExtremes[col.key];
+            if (max !== min && numVal > 0) {
+              // 比例 0 (最小) 到 1 (最大)
+              let ratio = (numVal - min) / (max - min);
+              // 淺綠色 (187, 247, 208) 到 紅色 (254, 202, 202) 漸層
+              let r = Math.round(187 + (254 - 187) * ratio);
+              let g = Math.round(247 + (202 - 247) * ratio);
+              let b = Math.round(208 + (202 - 208) * ratio);
+              td.style.backgroundColor = `rgb(${r}, ${g}, ${b})`;
+            } else if (numVal > 0 && max === min) {
+              td.style.backgroundColor = 'rgb(220, 252, 231)';
+            }
+          }
+
           td.innerHTML = `<input type="text" value="${val}" onchange="window.updateCell(${rowIdx}, '${col.key}', this.value)" class="w-full bg-transparent border-b border-transparent focus:border-blue-500 focus:bg-white focus:outline-none px-1 py-0.5">`;
           tr.appendChild(td);
         });
@@ -359,13 +396,17 @@
     };
 
     // ==========================================
-    // 3. 圖表引擎 (僅保留氣球 📍 符號)
+    // 3. 圖表引擎 (僅第一個工作表顯示圖表)
     // ==========================================
     function renderCharts() {
       const container = document.getElementById('charts-container');
       container.innerHTML = '';
-      const sheet = window.appState.sheets.find(s => s.id === window.appState.currentSheetId);
+      const sheetIndex = window.appState.sheets.findIndex(s => s.id === window.appState.currentSheetId);
       
+      // 若非第一個工作表，不渲染下方圖表區
+      if (sheetIndex > 0) return;
+
+      const sheet = window.appState.sheets[sheetIndex];
       const chartIds = ['sc1', 'sc2', 'sc3', 'sc4', 'sc5', 'sc6', 'sc7', 'sc8'];
       const chartTitles = ['產值同期比較(石墨)', '產值同期比較(鎢鉬鉭)', '產值同期比較(other)', '產值同期比較(合計)', '石墨累積產值', '鎢鉬鉭累積產值', 'other累積產值', '合計累積產值'];
 
@@ -466,54 +507,6 @@
       return combined;
     }
 
-    // 專用 Plugin：僅繪製氣球 📍 於 Aug 的 2026 紅色柱子正上方
-    const weAreHereBarPlugin = {
-      id: 'weAreHereBarPlugin',
-      afterDatasetsDraw(chart) {
-        const { ctx } = chart;
-        const meta = chart.getDatasetMeta(3); // 2026 是第 4 個 dataset (index 3)
-        if (!meta || meta.hidden) return;
-
-        const lastIndex = meta.data.length - 1;
-        const bar = meta.data[lastIndex];
-        if (!bar) return;
-
-        const x = bar.x; 
-        const y = bar.y - 12; // 柱子頂部上方 12px
-
-        ctx.save();
-        ctx.font = 'bold 14px sans-serif';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'bottom';
-        ctx.fillText('📍', x, y);
-        ctx.restore();
-      }
-    };
-
-    // 專用 Plugin：僅繪製氣球 📍 於折線圖最後一個點上方
-    const weAreHereLinePlugin = {
-      id: 'weAreHereLinePlugin',
-      afterDatasetsDraw(chart) {
-        const { ctx } = chart;
-        const meta = chart.getDatasetMeta(3); // 2026 折線是第 4 個 dataset (index 3)
-        if (!meta || meta.hidden) return;
-
-        const lastIndex = meta.data.length - 1;
-        const point = meta.data[lastIndex];
-        if (!point) return;
-
-        const x = point.x;
-        const y = point.y - 12;
-
-        ctx.save();
-        ctx.font = 'bold 14px sans-serif';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'bottom';
-        ctx.fillText('📍', x, y);
-        ctx.restore();
-      }
-    };
-
     function drawBarComparisonChart(chartId, rows, titleText, k23, k24, k25, k26, l23, l24, l25, l26, activeMonths) {
       const canvas = document.getElementById(`canvas-${chartId}`);
       if (!canvas) return;
@@ -527,24 +520,34 @@
             { label: l23, data: activeMonths.map((_, i) => parseNum(rows[i]?.[k23])), backgroundColor: '#10b981' },
             { label: l24, data: activeMonths.map((_, i) => parseNum(rows[i]?.[k24])), backgroundColor: '#3b82f6' },
             { label: l25, data: activeMonths.map((_, i) => parseNum(rows[i]?.[k25])), backgroundColor: '#f59e0b' },
-            { label: l26, data: activeMonths.map((_, i) => parseNum(rows[i]?.[k26])), backgroundColor: '#ef4444' }
+            { 
+              label: l26, 
+              data: activeMonths.map((_, i) => parseNum(rows[i]?.[k26])), 
+              backgroundColor: '#ef4444',
+              datalabels: {
+                align: 'end',
+                anchor: 'end',
+                formatter: function(value, context) {
+                  return context.dataIndex === activeMonths.length - 1 ? '📍 we are here' : '';
+                },
+                color: '#ef4444',
+                font: {
+                  weight: 'bold',
+                  size: 11
+                }
+              }
+            }
           ]
         },
         options: {
           responsive: true,
           maintainAspectRatio: false,
-          layout: {
-            padding: {
-              top: 35,
-              right: 25
-            }
-          },
           plugins: { 
             legend: { position: 'top' }, 
             title: { display: false, text: titleText }
           }
         },
-        plugins: [weAreHereBarPlugin]
+        plugins: [ChartDataLabels]
       });
     }
 
@@ -582,24 +585,36 @@
             { label: l23, data: data23, borderColor: '#10b981', backgroundColor: '#10b981', tension: 0.1 },
             { label: l24, data: data24, borderColor: '#3b82f6', backgroundColor: '#3b82f6', tension: 0.1 },
             { label: l25, data: data25, borderColor: '#f59e0b', backgroundColor: '#f59e0b', tension: 0.1 },
-            { label: l26, data: data26, borderColor: '#ef4444', backgroundColor: '#ef4444', tension: 0.1 }
+            { 
+              label: l26, 
+              data: data26, 
+              borderColor: '#ef4444', 
+              backgroundColor: '#ef4444', 
+              tension: 0.1,
+              datalabels: {
+                align: 'top',
+                anchor: 'end',
+                formatter: function(value, context) {
+                  return context.dataIndex === activeMonths.length - 1 ? '📍 we are here' : '';
+                },
+                color: '#ef4444',
+                font: {
+                  weight: 'bold',
+                  size: 11
+                }
+              }
+            }
           ]
         },
         options: {
           responsive: true,
           maintainAspectRatio: false,
-          layout: {
-            padding: {
-              top: 35,
-              right: 25
-            }
-          },
           plugins: { 
             legend: { position: 'top' }, 
             title: { display: false }
           }
         },
-        plugins: [weAreHereLinePlugin]
+        plugins: [ChartDataLabels]
       });
     }
 

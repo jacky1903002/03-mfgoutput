@@ -523,7 +523,7 @@
       const data24 = allMonths.map((_, i) => { s24 += parseNum(rows[i]?.[k24]); return s24; });
       const data25 = allMonths.map((_, i) => { s25 += parseNum(rows[i]?.[k25]); return s25; });
       
-      // 關鍵：超過 activeLimit (8月) 的 2026 資料直接回傳 null，線條在 8 月就會終止
+      // 關鍵：超過 activeLimit (8月) 的 2026 資料直接回傳 null，線條在 8 月就會終止且不會往後平拉
       const data26 = allMonths.map((_, i) => {
         if (i >= activeLimit) return null;
         let val = parseNum(rows[i]?.[k26]);

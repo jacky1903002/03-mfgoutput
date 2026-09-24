@@ -129,10 +129,17 @@
           name: '石墨複合材占比',
           columns: [
             { key: 'category', title: '類別' },
-            { key: 'month', title: '時間/月份' },
+            { key: 'month', title: 'MMYY' },
             { key: 'val', title: '數值' }
           ],
-          data: []
+          data: [
+            { category: '石墨', month: 'May-25', val: 8500 },
+            { category: '複材', month: 'May-25', val: 10500 },
+            { category: '石墨加複材', month: 'May-25', val: 19000 },
+            { category: '石墨', month: 'Jun-25', val: 8600 },
+            { category: '複材', month: 'Jun-25', val: 8200 },
+            { category: '石墨加複材', month: 'Jun-25', val: 16800 }
+          ]
         }
       ]
     };
@@ -264,7 +271,7 @@
         name: '新工作表 ' + (window.appState.sheets.length + 1),
         columns: [
           { key: 'category', title: '類別' },
-          { key: 'month', title: '月份' },
+          { key: 'month', title: 'MMYY' },
           { key: 'val', title: '數值' }
         ],
         data: []
@@ -364,7 +371,7 @@
       if (!window.isAuthorizedEditor) { alert("需要管理者權限！"); return; }
       const sheet = window.appState.sheets.find(s => s.id === window.appState.currentSheetId);
       let newRow = {};
-      sheet.columns.forEach((c, idx) => newRow[c.key] = idx === 0 ? '類別A' : (idx === 1 ? 'Jan' : 0));
+      sheet.columns.forEach((c, idx) => newRow[c.key] = idx === 0 ? '石墨' : (idx === 1 ? 'May-25' : 0));
       sheet.data.push(newRow);
       renderApp();
       autoSaveToFirebase();
@@ -458,7 +465,7 @@
         wrapper.id = `export-area-sheet3`;
         wrapper.innerHTML = `
           <div class="flex justify-between items-center mb-4">
-            <h3 class="font-semibold text-slate-700 text-base">${sheet.name} - 時間對三類別趨勢圖</h3>
+            <h3 class="font-semibold text-slate-700 text-base">${sheet.name} - 趨勢圖</h3>
             <button onclick="window.exportChartToPNG('sheet3', '${sheet.name}')" class="text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 px-2.5 py-1 rounded transition">匯出圖片</button>
           </div>
           <div class="relative h-96 w-full">
@@ -483,17 +490,35 @@
       if (!canvas) return;
       if (window.chartInstances['sheet3']) window.chartInstances['sheet3'].destroy();
 
-      // 收集所有不重複的時間/月份 (X軸)
-      let timeLabels = [...new Set(sheet.data.map(r => String(r.month || r[sheet.columns[1]?.key] || '').trim()))].filter(Boolean);
-      if (timeLabels.length === 0) timeLabels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug'];
+      // 收集所有不重複的時間/月份 (X軸)，維持資料輸入順序
+      let timeLabels = [];
+      sheet.data.forEach(r => {
+        let mVal = String(r.month || r[sheet.columns[1]?.key] || '').trim();
+        if (mVal && !timeLabels.includes(mVal)) {
+          timeLabels.push(mVal);
+        }
+      });
+      if (timeLabels.length === 0) timeLabels = ['May-25', 'Jun-25', 'Jul-25', 'Aug-25', 'Sep-25'];
 
-      // 收集所有不重複的類別 (最多取前三個作為三條線)
-      let categories = [...new Set(sheet.data.map(r => String(r.category || r[sheet.columns[0]?.key] || '').trim()))].filter(Boolean);
-      if (categories.length === 0) categories = ['類別A', '類別B', '類別C'];
+      // 收集所有不重複的類別 (作為多條折線)
+      let categories = [];
+      sheet.data.forEach(r => {
+        let cVal = String(r.category || r[sheet.columns[0]?.key] || '').trim();
+        if (cVal && !categories.includes(cVal)) {
+          categories.push(cVal);
+        }
+      });
+      if (categories.length === 0) categories = ['石墨', '複材', '石墨加複材'];
 
-      const colors = ['#10b981', '#3b82f6', '#ef4444', '#f59e0b', '#8b5cf6'];
+      // 對應指定顏色或預設顏色
+      const colorMap = {
+        '石墨': '#3b82f6',     // 藍色
+        '複材': '#f97316',     // 橘色
+        '石墨加複材': '#6b7280' // 灰色
+      };
+      const fallbackColors = ['#3b82f6', '#f97316', '#6b7280', '#10b981', '#ef4444', '#8b5cf6'];
 
-      const datasets = categories.slice(0, 3).map((cat, idx) => {
+      const datasets = categories.map((cat, idx) => {
         const dataVals = timeLabels.map(t => {
           const match = sheet.data.find(r => {
             let cVal = String(r.category || r[sheet.columns[0]?.key] || '').trim();
@@ -504,12 +529,16 @@
           return match ? parseNum(match[valKey]) : 0;
         });
 
+        const lineColor = colorMap[cat] || fallbackColors[idx % fallbackColors.length];
+
         return {
           label: cat,
           data: dataVals,
-          borderColor: colors[idx % colors.length],
-          backgroundColor: colors[idx % colors.length],
+          borderColor: lineColor,
+          backgroundColor: lineColor,
           tension: 0.1,
+          borderWidth: 2,
+          pointRadius: 3,
           datalabels: { display: false }
         };
       });
@@ -524,8 +553,17 @@
           responsive: true,
           maintainAspectRatio: false,
           plugins: {
-            legend: { position: 'top' },
+            legend: { position: 'bottom' },
             title: { display: false }
+          },
+          scales: {
+            y: {
+              beginAtZero: true,
+              grid: { color: '#f1f5f9' }
+            },
+            x: {
+              grid: { display: false }
+            }
           }
         },
         plugins: [ChartDataLabels]

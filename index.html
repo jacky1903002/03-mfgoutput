@@ -361,7 +361,7 @@
     };
 
     // ==========================================
-    // 3. 圖表引擎 (動態智慧識別最新年份與欄位)
+    // 3. 圖表引擎 (9~12月無資料直接切斷不畫線)
     // ==========================================
     function renderCharts() {
       const container = document.getElementById('charts-container');
@@ -403,7 +403,6 @@
       const allMonths = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
       const materials = ["石墨", "鎢鉬鉭", "other"];
 
-      // 自動抓取最後四個欄位作為年份對應 (通常依序為 2023, 2024, 2025, 2026)
       const numCols = sheet.columns.slice(2);
       const k23 = numCols[numCols.length - 4] ? numCols[numCols.length - 4].key : '2023';
       const k24 = numCols[numCols.length - 3] ? numCols[numCols.length - 3].key : '2024';
@@ -429,7 +428,7 @@
         });
       };
 
-      // 找出最新年份（即最右側欄位）有填寫資料的最後月份索引 (例如 8 月 = 7)
+      // 自動尋找 2026 年有填資料的最後月份
       let maxDataMonthIndex = 0;
       sheet.data.forEach((r, idx) => {
         let valLatest = parseNum(r[k26]);
@@ -524,15 +523,14 @@
       const data24 = allMonths.map((_, i) => { s24 += parseNum(rows[i]?.[k24]); return s24; });
       const data25 = allMonths.map((_, i) => { s25 += parseNum(rows[i]?.[k25]); return s25; });
       
+      // 關鍵：超過 activeLimit (8月) 的 2026 資料直接回傳 null，線條在 8 月就會終止
       const data26 = allMonths.map((_, i) => {
         if (i >= activeLimit) return null;
         let val = parseNum(rows[i]?.[k26]);
-        if (val <= 0) return null;
         s26 += val;
         return s26;
       });
 
-      // 同期加總比對 (只取到 activeLimit 8月)
       let periodSum23 = 0, periodSum24 = 0, periodSum25 = 0, periodSum26 = 0;
       for (let i = 0; i < activeLimit; i++) {
         periodSum23 += parseNum(rows[i]?.[k23]);
@@ -549,7 +547,6 @@
       ];
       totals.sort((a, b) => b.val - a.val);
 
-      // YoY 計算 (最新年份同期對比前一年同期)
       const yoyVal = periodSum25 > 0 ? ((periodSum26 - periodSum25) / periodSum25 * 100).toFixed(1) : 0;
 
       const titleEl = document.getElementById(`title-${chartId}`);

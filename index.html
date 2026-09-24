@@ -361,7 +361,7 @@
     };
 
     // ==========================================
-    // 3. 圖表引擎 (9~12月無資料直接切斷不畫線)
+    // 3. 圖表引擎 (移除 9~12 月延伸、移除數值標籤)
     // ==========================================
     function renderCharts() {
       const container = document.getElementById('charts-container');
@@ -428,15 +428,16 @@
         });
       };
 
-      // 自動尋找 2026 年有填資料的最後月份
-      let maxDataMonthIndex = 0;
+      // 自動尋找 2026 年有填資料的最後月份（若 9~12 月完全沒有有效大於 0 的數值，則 activeLimit 停在 8 月）
+      let maxDataMonthIndex = 7; // 預設只到 8 月 (索引 7)
       sheet.data.forEach((r, idx) => {
-        let valLatest = parseNum(r[k26]);
-        if (valLatest > 0) {
+        let v = parseNum(r[k26]);
+        if (v > 0) {
           maxDataMonthIndex = Math.max(maxDataMonthIndex, idx);
         }
       });
-      const activeLimit = maxDataMonthIndex + 1;
+      // 確保超過 8 月若沒資料就不強行延伸
+      let activeLimit = Math.min(maxDataMonthIndex + 1, 8);
 
       materials.forEach((mat, idx) => {
         let rows = getMaterialRows(mat);
@@ -506,8 +507,13 @@
         options: {
           responsive: true,
           maintainAspectRatio: false,
-          plugins: { legend: { position: 'top' }, title: { display: false, text: titleText } }
-        }
+          plugins: { 
+            legend: { position: 'top' }, 
+            title: { display: false, text: titleText },
+            datalabels: { display: false } // 完全關閉資料標籤
+          }
+        },
+        plugins: [ChartDataLabels]
       });
     }
 
@@ -523,7 +529,7 @@
       const data24 = allMonths.map((_, i) => { s24 += parseNum(rows[i]?.[k24]); return s24; });
       const data25 = allMonths.map((_, i) => { s25 += parseNum(rows[i]?.[k25]); return s25; });
       
-      // 關鍵：超過 activeLimit (8月) 的 2026 資料直接回傳 null，線條在 8 月就會終止且不會往後平拉
+      // 超過 activeLimit (8月) 的 2026 資料直接回傳 null，線條在 8 月就會終止
       const data26 = allMonths.map((_, i) => {
         if (i >= activeLimit) return null;
         let val = parseNum(rows[i]?.[k26]);
@@ -571,19 +577,7 @@
           plugins: { 
             legend: { position: 'top' }, 
             title: { display: false },
-            datalabels: {
-              align: 'top',
-              formatter: (value, context) => {
-                if (value !== null && context.dataIndex === activeLimit - 1 && context.dataset.label === l26) {
-                  return (value / 1000000).toFixed(1) + 'M';
-                }
-                if (value !== null && context.dataIndex === 11 && context.dataset.label !== l26) {
-                  return (value / 1000000).toFixed(1) + 'M';
-                }
-                return '';
-              },
-              font: { size: 10, weight: 'bold' }
-            }
+            datalabels: { display: false } // 完全關閉所有圖上數值標籤
           }
         },
         plugins: [ChartDataLabels]

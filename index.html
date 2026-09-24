@@ -121,16 +121,17 @@
             { key: 'category', title: '類別' },
             { key: 'd1', title: '2026/5/1' },
             { key: 'd2', title: '2026/5/2' },
-            { key: 'd3', title: '2026/5/3' }
+            { key: 'd3', title: '2026/5/3' },
+            { key: 'd4', title: '2026/6/1' }
           ],
           data: [
-            { category: '線切割', d1: 9536, d2: 9062, d3: 7805 },
-            { category: '金屬一課', d1: 10391, d2: 10792, d3: 9729 },
-            { category: '金屬二課', d1: 7344, d2: 7586, d3: 10036 },
-            { category: '車床課', d1: 7881, d2: 10905, d3: 7133 },
-            { category: '最終檢驗', d1: 8132, d2: 10850, d3: 10797 },
-            { category: '表面處理', d1: 8117, d2: 7944, d3: 9589 },
-            { category: '後處理', d1: 7666, d2: 7315, d3: 9616 }
+            { category: '線切割', d1: 9801, d2: 7815, d3: 9490, d4: 8500 },
+            { category: '金屬一課', d1: 9871, d2: 8246, d3: 10229, d4: 9200 },
+            { category: '金屬二課', d1: 9780, d2: 8894, d3: 10461, d4: 8800 },
+            { category: '車床課', d1: 10757, d2: 7295, d3: 9952, d4: 9100 },
+            { category: '最終檢驗', d1: 10404, d2: 10609, d3: 8778, d4: 9400 },
+            { category: '表面處理', d1: 9748, d2: 10142, d3: 8946, d4: 8900 },
+            { category: '後處理', d1: 7258, d2: 10706, d3: 10342, d4: 9600 }
           ]
         },
         {
@@ -139,15 +140,11 @@
           columns: [
             { key: 'category', title: '類別' },
             { key: 'm1', title: 'May-25' },
-            { key: 'm2', title: 'Jun-25' },
-            { key: 'm3', title: 'Jul-25' },
-            { key: 'm4', title: 'Aug-25' },
-            { key: 'm5', title: 'Sep-25' }
+            { key: 'm2', title: 'Jun-25' }
           ],
           data: [
-            { category: '石墨', m1: 8489, m2: 8474, m3: 10623, m4: 10722, m5: 10029 },
-            { category: '複材', m1: 10582, m2: 8292, m3: 10028, m4: 9038, m5: 9784 },
-            { category: '石墨加複材', m1: 19071, m2: 16766, m3: 20651, m4: 19760, m5: 19813 }
+            { category: '石墨', m1: 8489, m2: 8474 },
+            { category: '複材', m1: 10582, m2: 8292 }
           ]
         }
       ]
@@ -280,8 +277,8 @@
         name: '新工作表 ' + (window.appState.sheets.length + 1),
         columns: [
           { key: 'category', title: '類別' },
-          { key: 'm1', title: 'May-25' },
-          { key: 'm2', title: 'Jun-25' }
+          { key: 'm1', title: '2026/5/1' },
+          { key: 'm2', title: '2026/5/2' }
         ],
         data: []
       });
@@ -359,7 +356,7 @@
     window.addColumn = function() {
       if (!window.isAuthorizedEditor) { alert("需要管理者權限！"); return; }
       const sheet = window.appState.sheets.find(s => s.id === window.appState.currentSheetId);
-      const colTitle = prompt("請輸入新欄位標題 (例如 2026/5/4)：");
+      const colTitle = prompt("請輸入新欄位日期 (例如 2026/5/4)：");
       if (!colTitle) return;
       const colKey = 'col_' + Date.now();
       sheet.columns.push({ key: colKey, title: colTitle });
@@ -435,7 +432,7 @@
           <div class="flex justify-between items-center mb-4">
             <div>
               <h3 class="font-bold text-slate-800 text-lg">線上WIP - 每月平均熱力表</h3>
-              <p class="text-xs text-slate-500 mt-0.5">自動將每日數據彙整為「月份平均」，並以顏色深淺呈現各部門表現</p>
+              <p class="text-xs text-slate-500 mt-0.5">自動將每日數據（如 2026/5/1）彙整為各月份平均，並以顏色深淺呈現各部門表現</p>
             </div>
             <button onclick="window.exportChartToPNG('sheet2-heatmap', 'WIP每月平均熱力表')" class="text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 px-3 py-1.5 rounded transition">匯出圖片</button>
           </div>
@@ -471,7 +468,7 @@
       return isNaN(n) ? 0 : n;
     }
 
-    // 建立 WIP 每月平均熱力表（欄位只顯示月份平均，如 2026/05 平均）
+    // 建立 WIP 每月平均熱力表（完美匹配 2026/5/1 這種日期欄位）
     function buildWipMonthlyHeatmap(sheet) {
       const container = document.getElementById('heatmap-container');
       if (!container) return;
@@ -482,6 +479,7 @@
       for (let i = 1; i < sheet.columns.length; i++) {
         let col = sheet.columns[i];
         let title = col.title.trim();
+        // 支援 2026/5/1 或 2026-5-1 格式解析
         let parts = title.split(/[\/\-]/);
         if (parts.length >= 2) {
           let year = parts[0];

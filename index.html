@@ -41,7 +41,7 @@
   <header class="bg-white shadow-sm border-b px-6 py-4 flex justify-between items-center">
     <div class="flex items-center space-x-4">
       <h1 class="text-xl font-bold text-slate-800">MFG 分析系統</h1>
-      <span id="user-email-display" class="text-sm text-slate-500 bg-slate-100 px-3 py-1 rounded-full">未登入</span>
+      <span id="user-email-display" class="text-sm text-slate-500 bg-slate-100 px-3 py-1 rounded-full">驗證中...</span>
     </div>
     <div class="flex items-center space-x-3">
       <button onclick="window.exportToExcel()" class="bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-emerald-700 transition">匯出 Excel</button>
@@ -127,21 +127,17 @@
     };
     window.chartInstances = {};
 
-// 驗證狀態監聽（加入載入中狀態，避免 F5 重新整理時畫面瞬間被清空）
-    document.getElementById('user-email-display').textContent = '驗證中...';
-
+    // 驗證狀態監聽（加入載入中狀態，防範 F5 重新整理時畫面空白）
     auth.onAuthStateChanged(user => {
       if (user) {
         window.isAuthorizedEditor = true;
         document.getElementById('auth-modal').classList.add('hidden');
         document.getElementById('user-email-display').textContent = user.email;
-        loadFromFirebase(); // 成功登入後才會從 Firebase 抓取最新資料
+        loadFromFirebase();
       } else {
         window.isAuthorizedEditor = false;
         document.getElementById('auth-modal').classList.remove('hidden');
         document.getElementById('user-email-display').textContent = '未登入';
-        
-        // 即使未登入，也可以先載入預設畫面結構，避免畫面空白
         renderApp();
       }
     });
@@ -360,7 +356,7 @@
       const sheet = window.appState.sheets.find(s => s.id === window.appState.currentSheetId);
       
       const chartIds = ['sc1', 'sc2', 'sc3', 'sc4', 'sc5', 'sc6', 'sc7', 'sc8'];
-      const chartTitles = ['產值同期比較(石墨)', '產值同期比較(鎢鉬鈕)', '產值同期比較(其他)', '產值同期比較(合計)', '石墨累積產值', '鎢鉬鈕累積產值', '其他累積產值', '合計累積產值'];
+      const chartTitles = ['產值同期比較(石墨)', '產值同期比較(鎢鉬鉭)', '產值同期比較(其他)', '產值同期比較(合計)', '石墨累積產值', '鎢鉬鉭累積產值', '其他累積產值', '合計累積產值'];
 
       chartIds.forEach((id, idx) => {
         const wrapper = document.createElement('div');
@@ -389,8 +385,8 @@
     }
 
     function buildAllEightComparisonCharts(sheet) {
-      const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-      const materials = ["石墨", "鎢鉬鈕", "其他"];
+      const allMonths = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+      const materials = ["石墨", "鎢鉬鉭", "其他"];
 
       const findKey = (yearStr) => {
         let col = sheet.columns.find(c => String(c.title).includes(yearStr) || String(c.key).includes(yearStr));
@@ -404,9 +400,32 @@
       const getMaterialRows = (mat) => {
         return sheet.data.filter(r => {
           let cat = String(r.category || r[sheet.columns[0].key] || '').trim();
+          if (mat === "鎢鉬鉭") {
+            return cat.includes("鎢鉬鉭") || cat.includes("鎢鉬鈕");
+          }
           return cat.includes(mat);
         });
       };
+
+      // 自動偵測 2026 年實際有資料的最後一個月份索引
+      let maxDataMonthIndex = 7; // 預設 8 月 (索引 7)
+      let sampleRows = sheet.data;
+      if (sampleRows.length > 0) {
+        let lastValidIdx = -1;
+        sampleRows.forEach((r, idx) => {
+          let val26 = parseNum(r[k26]);
+          if (val26 > 0) {
+            lastValidIdx = idx;
+          }
+        });
+        if (lastValidIdx !== -1) {
+          maxDataMonthIndex = lastValidIdx;
+        }
+      }
+
+      // 截斷月份，讓 2026 年只顯示到有資料的月份為止
+      const activeMonthsCount = Math.max(8, maxDataMonthIndex + 1);
+      const months = allMonths.slice(0, activeMonthsCount);
 
       const getCombinedRows = () => {
         let combined = [];
@@ -428,13 +447,13 @@
       };
 
       materials.forEach((mat, idx) => {
-        let rows = getMaterialRows(mat);
+        let rows = getMaterialRows(mat).slice(0, activeMonthsCount);
         drawBarComparisonChart(`sc${idx+1}`, rows, `${mat}產值同期比較`, k23, k24, k25, k26);
       });
       drawBarComparisonChart('sc4', getCombinedRows(), '合計產值同期比較', k23, k24, k25, k26);
 
       materials.forEach((mat, idx) => {
-        let rows = getMaterialRows(mat);
+        let rows = getMaterialRows(mat).slice(0, activeMonthsCount);
         drawCumulativeLineChart(`sc${idx+5}`, rows, `${mat}累積產值`, k23, k24, k25, k26);
       });
       drawCumulativeLineChart('sc8', getCombinedRows(), '合計累積產值', k23, k24, k25, k26);
@@ -465,7 +484,7 @@
       });
     }
 
-function drawCumulativeLineChart(chartId, rows, titleText, k23, k24, k25, k26) {
+    function drawCumulativeLineChart(chartId, rows, titleText, k23, k24, k25, k26) {
       const canvas = document.getElementById(`canvas-${chartId}`);
       if (!canvas) return;
       if (window.chartInstances[chartId]) window.chartInstances[chartId].destroy();
@@ -473,34 +492,20 @@ function drawCumulativeLineChart(chartId, rows, titleText, k23, k24, k25, k26) {
       const labels = rows.map(r => r.month || r[Object.keys(r)[1]] || 'Month');
       
       let sum23 = 0, sum24 = 0, sum25 = 0, sum26 = 0;
-      let has26Started = false;
-
       const data23 = rows.map(r => { sum23 += parseNum(r[k23]); return sum23; });
       const data24 = rows.map(r => { sum24 += parseNum(r[k24]); return sum24; });
       const data25 = rows.map(r => { sum25 += parseNum(r[k25]); return sum25; });
-      
-      // 針對 2026 年：檢查該月份是否有實際數值，若後續月份皆無資料則中斷不顯示
-      const data26 = rows.map(r => {
-        let val = parseNum(r[k26]);
-        // 判斷該列是否有填寫 2026 資料（若大於 0 代表有統計）
-        if (val > 0 || r[k26] !== undefined && r[k26] !== '') {
-          sum26 += val;
-          return sum26;
-        } else {
-          // 如果該月沒有資料，回傳 null 讓 Chart.js 折線圖在該點斷開，不往後延伸
-          return null; 
-        }
-      });
+      const data26 = rows.map(r => { sum26 += parseNum(r[k26]); return sum26; });
 
       window.chartInstances[chartId] = new Chart(canvas, {
         type: 'line',
         data: {
           labels: labels,
           datasets: [
-            { label: '2023', data: data23, borderColor: '#10b981', backgroundColor: '#10b981', tension: 0.1, spanGaps: false },
-            { label: '2024', data: data24, borderColor: '#3b82f6', backgroundColor: '#3b82f6', tension: 0.1, spanGaps: false },
-            { label: '2025', data: data25, borderColor: '#f59e0b', backgroundColor: '#f59e0b', tension: 0.1, spanGaps: false },
-            { label: '2026', data: data26, borderColor: '#ef4444', backgroundColor: '#ef4444', tension: 0.1, spanGaps: false }
+            { label: '2023', data: data23, borderColor: '#10b981', backgroundColor: '#10b981', tension: 0.1 },
+            { label: '2024', data: data24, borderColor: '#3b82f6', backgroundColor: '#3b82f6', tension: 0.1 },
+            { label: '2025', data: data25, borderColor: '#f59e0b', backgroundColor: '#f59e0b', tension: 0.1 },
+            { label: '2026', data: data26, borderColor: '#ef4444', backgroundColor: '#ef4444', tension: 0.1 }
           ]
         },
         options: {

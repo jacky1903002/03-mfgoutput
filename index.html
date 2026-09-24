@@ -460,27 +460,42 @@
       });
     }
 
-    function drawCumulativeLineChart(chartId, rows, titleText, k23, k24, k25, k26) {
+function drawCumulativeLineChart(chartId, rows, titleText, k23, k24, k25, k26) {
       const canvas = document.getElementById(`canvas-${chartId}`);
       if (!canvas) return;
       if (window.chartInstances[chartId]) window.chartInstances[chartId].destroy();
 
       const labels = rows.map(r => r.month || r[Object.keys(r)[1]] || 'Month');
+      
       let sum23 = 0, sum24 = 0, sum25 = 0, sum26 = 0;
+      let has26Started = false;
+
       const data23 = rows.map(r => { sum23 += parseNum(r[k23]); return sum23; });
       const data24 = rows.map(r => { sum24 += parseNum(r[k24]); return sum24; });
       const data25 = rows.map(r => { sum25 += parseNum(r[k25]); return sum25; });
-      const data26 = rows.map(r => { sum26 += parseNum(r[k26]); return sum26; });
+      
+      // 針對 2026 年：檢查該月份是否有實際數值，若後續月份皆無資料則中斷不顯示
+      const data26 = rows.map(r => {
+        let val = parseNum(r[k26]);
+        // 判斷該列是否有填寫 2026 資料（若大於 0 代表有統計）
+        if (val > 0 || r[k26] !== undefined && r[k26] !== '') {
+          sum26 += val;
+          return sum26;
+        } else {
+          // 如果該月沒有資料，回傳 null 讓 Chart.js 折線圖在該點斷開，不往後延伸
+          return null; 
+        }
+      });
 
       window.chartInstances[chartId] = new Chart(canvas, {
         type: 'line',
         data: {
           labels: labels,
           datasets: [
-            { label: '2023', data: data23, borderColor: '#10b981', backgroundColor: '#10b981', tension: 0.1 },
-            { label: '2024', data: data24, borderColor: '#3b82f6', backgroundColor: '#3b82f6', tension: 0.1 },
-            { label: '2025', data: data25, borderColor: '#f59e0b', backgroundColor: '#f59e0b', tension: 0.1 },
-            { label: '2026', data: data26, borderColor: '#ef4444', backgroundColor: '#ef4444', tension: 0.1 }
+            { label: '2023', data: data23, borderColor: '#10b981', backgroundColor: '#10b981', tension: 0.1, spanGaps: false },
+            { label: '2024', data: data24, borderColor: '#3b82f6', backgroundColor: '#3b82f6', tension: 0.1, spanGaps: false },
+            { label: '2025', data: data25, borderColor: '#f59e0b', backgroundColor: '#f59e0b', tension: 0.1, spanGaps: false },
+            { label: '2026', data: data26, borderColor: '#ef4444', backgroundColor: '#ef4444', tension: 0.1, spanGaps: false }
           ]
         },
         options: {

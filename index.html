@@ -361,7 +361,7 @@
     };
 
     // ==========================================
-    // 3. 圖表引擎 (調整氣球位置與移除各柱數值標籤)
+    // 3. 圖表引擎 (完全拿掉黑字數字標籤，修正氣球位置)
     // ==========================================
     function renderCharts() {
       const container = document.getElementById('charts-container');
@@ -478,15 +478,31 @@
         data: {
           labels: activeMonths,
           datasets: [
-            { label: l23, data: activeMonths.map((_, i) => parseNum(rows[i]?.[k23])), backgroundColor: '#10b981' },
-            { label: l24, data: activeMonths.map((_, i) => parseNum(rows[i]?.[k24])), backgroundColor: '#3b82f6' },
-            { label: l25, data: activeMonths.map((_, i) => parseNum(rows[i]?.[k25])), backgroundColor: '#f59e0b' },
+            { 
+              label: l23, 
+              data: activeMonths.map((_, i) => parseNum(rows[i]?.[k23])), 
+              backgroundColor: '#10b981',
+              datalabels: { display: false } // 拿掉黑字標籤
+            },
+            { 
+              label: l24, 
+              data: activeMonths.map((_, i) => parseNum(rows[i]?.[k24])), 
+              backgroundColor: '#3b82f6',
+              datalabels: { display: false } // 拿掉黑字標籤
+            },
+            { 
+              label: l25, 
+              data: activeMonths.map((_, i) => parseNum(rows[i]?.[k25])), 
+              backgroundColor: '#f59e0b',
+              datalabels: { display: false } // 拿掉黑字標籤
+            },
             { 
               label: l26, 
               data: activeMonths.map((_, i) => parseNum(rows[i]?.[k26])), 
               backgroundColor: '#ef4444',
-              // 設定僅在最後一根柱子 (Aug, 索引 7) 的正上方顯示「📍 we are here」氣球標籤
+              // 僅在最後一根柱子 (Aug, 索引 7) 的正上方顯示「📍 we are here」氣球
               datalabels: {
+                display: true,
                 align: 'top',
                 anchor: 'end',
                 formatter: function(value, context) {
@@ -506,7 +522,7 @@
           maintainAspectRatio: false,
           layout: {
             padding: {
-              top: 25 // 頂部預留空間，確保氣球完整顯示不被切掉
+              top: 40 // 預留上方空間讓氣球完整顯示
             }
           },
           plugins: { 
@@ -549,9 +565,9 @@
         data: {
           labels: activeMonths,
           datasets: [
-            { label: l23, data: data23, borderColor: '#10b981', backgroundColor: '#10b981', tension: 0.1 },
-            { label: l24, data: data24, borderColor: '#3b82f6', backgroundColor: '#3b82f6', tension: 0.1 },
-            { label: l25, data: data25, borderColor: '#f59e0b', backgroundColor: '#f59e0b', tension: 0.1 },
+            { label: l23, data: data23, borderColor: '#10b981', backgroundColor: '#10b981', tension: 0.1, datalabels: { display: false } },
+            { label: l24, data: data24, borderColor: '#3b82f6', backgroundColor: '#3b82f6', tension: 0.1, datalabels: { display: false } },
+            { label: l25, data: data25, borderColor: '#f59e0b', backgroundColor: '#f59e0b', tension: 0.1, datalabels: { display: false } },
             { 
               label: l26, 
               data: data26, 
@@ -560,6 +576,7 @@
               tension: 0.1,
               // 在折線圖最後一個點上方標註「we are here」氣球
               datalabels: {
+                display: true,
                 align: 'top',
                 anchor: 'end',
                 formatter: function(value, context) {
@@ -579,7 +596,7 @@
           maintainAspectRatio: false,
           layout: {
             padding: {
-              top: 25 // 頂部預留空間，確保氣球完整顯示
+              top: 40 // 頂部預留空間，確保氣球完整顯示
             }
           },
           plugins: { 

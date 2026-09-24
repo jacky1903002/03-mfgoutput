@@ -127,17 +127,22 @@
     };
     window.chartInstances = {};
 
-    // 驗證狀態監聽
+// 驗證狀態監聽（加入載入中狀態，避免 F5 重新整理時畫面瞬間被清空）
+    document.getElementById('user-email-display').textContent = '驗證中...';
+
     auth.onAuthStateChanged(user => {
       if (user) {
         window.isAuthorizedEditor = true;
         document.getElementById('auth-modal').classList.add('hidden');
         document.getElementById('user-email-display').textContent = user.email;
-        loadFromFirebase();
+        loadFromFirebase(); // 成功登入後才會從 Firebase 抓取最新資料
       } else {
         window.isAuthorizedEditor = false;
         document.getElementById('auth-modal').classList.remove('hidden');
         document.getElementById('user-email-display').textContent = '未登入';
+        
+        // 即使未登入，也可以先載入預設畫面結構，避免畫面空白
+        renderApp();
       }
     });
 

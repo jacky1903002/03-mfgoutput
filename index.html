@@ -17,9 +17,6 @@
   <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
-  <style>
-    .no-export { /* 截圖時自動隱藏 */ }
-  </style>
 </head>
 <body class="bg-slate-100 text-slate-800 min-h-screen flex flex-col">
 
@@ -122,19 +119,20 @@
           name: '線上WIP',
           columns: [
             { key: 'category', title: '類別' },
-            { key: 'd1', title: '2026/5/1' },
-            { key: 'd2', title: '2026/5/2' },
-            { key: 'd3', title: '2026/5/3' },
-            { key: 'd4', title: '2026/6/1' }
+            { key: 'May-26', title: 'May-26' },
+            { key: 'Jun-26', title: 'Jun-26' },
+            { key: 'Jul-26', title: 'Jul-26' },
+            { key: 'Aug-26', title: 'Aug-26' },
+            { key: 'Sep-26', title: 'Sep-26' }
           ],
           data: [
-            { category: '線切割', d1: 9801, d2: 7815, d3: 9490, d4: 8500 },
-            { category: '金屬一課', d1: 9871, d2: 8246, d3: 10229, d4: 9200 },
-            { category: '金屬二課', d1: 9780, d2: 8894, d3: 10461, d4: 8800 },
-            { category: '車床課', d1: 10757, d2: 7295, d3: 9952, d4: 9100 },
-            { category: '最終檢驗', d1: 10404, d2: 10609, d3: 8778, d4: 9400 },
-            { category: '表面處理', d1: 9748, d2: 10142, d3: 8946, d4: 8900 },
-            { category: '後處理', d1: 7258, d2: 10706, d3: 10342, d4: 9600 }
+            { category: '線切割', 'May-26': 10404, 'Jun-26': 7996, 'Jul-26': 7865, 'Aug-26': 10368, 'Sep-26': 8219 },
+            { category: '金屬一課', 'May-26': 8577, 'Jun-26': 9414, 'Jul-26': 8363, 'Aug-26': 10913, 'Sep-26': 10522 },
+            { category: '金屬二課', 'May-26': 10690, 'Jun-26': 7596, 'Jul-26': 10942, 'Aug-26': 7758, 'Sep-26': 8800 },
+            { category: '車床課', 'May-26': 10171, 'Jun-26': 8541, 'Jul-26': 8072, 'Aug-26': 10916, 'Sep-26': 9189 },
+            { category: '最終檢驗', 'May-26': 8106, 'Jun-26': 10719, 'Jul-26': 8666, 'Aug-26': 8028, 'Sep-26': 10365 },
+            { category: '表面處理', 'May-26': 7468, 'Jun-26': 10138, 'Jul-26': 8875, 'Aug-26': 10351, 'Sep-26': 7622 },
+            { category: '後處理', 'May-26': 9806, 'Jun-26': 10804, 'Jul-26': 9468, 'Aug-26': 9993, 'Sep-26': 9153 }
           ]
         },
         {
@@ -280,8 +278,8 @@
         name: '新工作表 ' + (window.appState.sheets.length + 1),
         columns: [
           { key: 'category', title: '類別' },
-          { key: 'm1', title: '2026/5/1' },
-          { key: 'm2', title: '2026/5/2' }
+          { key: 'm1', title: 'May-26' },
+          { key: 'm2', title: 'Jun-26' }
         ],
         data: []
       });
@@ -359,7 +357,7 @@
     window.addColumn = function() {
       if (!window.isAuthorizedEditor) { alert("需要管理者權限！"); return; }
       const sheet = window.appState.sheets.find(s => s.id === window.appState.currentSheetId);
-      const colTitle = prompt("請輸入新欄位日期 (例如 2026/5/4)：");
+      const colTitle = prompt("請輸入新欄位名稱 (例如 Jul-26)：");
       if (!colTitle) return;
       const colKey = 'col_' + Date.now();
       sheet.columns.push({ key: colKey, title: colTitle });
@@ -427,23 +425,23 @@
         if (sheet) buildAllEightComparisonCharts(sheet);
 
       } else if (sheetIndex === 1) {
-        // 第二個工作表：WIP 每月平均熱力表
+        // 第二個工作表：線上WIP 熱力圖（超明顯對比：大紅、小綠）
         const wrapper = document.createElement('div');
         wrapper.className = 'bg-white p-6 rounded-xl shadow-sm border flex flex-col md:col-span-2';
         wrapper.id = `export-area-sheet2-heatmap`;
         wrapper.innerHTML = `
           <div class="flex justify-between items-center mb-4">
             <div>
-              <h3 class="font-bold text-slate-800 text-lg">線上WIP - 每月平均熱力表</h3>
-              <p class="text-xs text-slate-500 mt-0.5">自動將每日數據（如 2026/5/1）彙整為各月份平均，並以顏色深淺呈現各部門表現</p>
+              <h3 class="font-bold text-slate-800 text-lg">線上WIP - 熱力圖分析</h3>
+              <p class="text-xs text-slate-500 mt-0.5">數值越大越紅、越小越淺綠，超明顯對比呈現</p>
             </div>
-            <button onclick="window.exportChartToPNG('sheet2-heatmap', 'WIP每月平均熱力表')" class="export-btn text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 px-3 py-1.5 rounded transition">匯出圖片</button>
+            <button onclick="window.exportChartToPNG('sheet2-heatmap', 'WIP熱力圖')" class="export-btn text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 px-3 py-1.5 rounded transition">匯出圖片</button>
           </div>
           <div id="heatmap-container" class="overflow-x-auto w-full"></div>
         `;
         container.appendChild(wrapper);
 
-        buildWipMonthlyHeatmap(sheet);
+        buildWipHeatmapDirect(sheet);
 
       } else if (sheetIndex === 2) {
         const wrapper = document.createElement('div');
@@ -471,90 +469,57 @@
       return isNaN(n) ? 0 : n;
     }
 
-    // 建立 WIP 每月平均熱力表
-    function buildWipMonthlyHeatmap(sheet) {
+    // 建立線上WIP直接熱力圖（超明顯對比：大紅、小綠）
+    function buildWipHeatmapDirect(sheet) {
       const container = document.getElementById('heatmap-container');
       if (!container) return;
 
-      let monthMap = {}; 
-      let monthList = [];
-
-      for (let i = 1; i < sheet.columns.length; i++) {
-        let col = sheet.columns[i];
-        let title = col.title.trim();
-        let parts = title.split(/[\/\-]/);
-        if (parts.length >= 2) {
-          let year = parts[0];
-          let month = parts[1].padStart(2, '0');
-          let yearMonthKey = `${year}/${month}`;
-          if (!monthMap[yearMonthKey]) {
-            monthMap[yearMonthKey] = [];
-            monthList.push(yearMonthKey);
-          }
-          monthMap[yearMonthKey].push(col.key);
-        }
-      }
-
-      monthList.sort();
-
-      if (monthList.length === 0) {
-        container.innerHTML = `<p class="text-sm text-slate-400 py-6 text-center">欄位標題未包含有效日期格式 (例如 2026/5/1)，無法計算月平均。</p>`;
+      let cols = sheet.columns.slice(1); // 略過第一欄類別
+      if (cols.length === 0) {
+        container.innerHTML = `<p class="text-sm text-slate-400 py-6 text-center">無可用欄位。</p>`;
         return;
       }
 
-      let processedData = [];
-      let allCellValues = [];
-
+      // 收集所有數值以計算全域最大與最小值
+      let allValues = [];
       sheet.data.forEach(row => {
-        let catName = String(row[sheet.columns[0].key] || '未命名').trim();
-        let rowObj = { category: catName };
-
-        monthList.forEach(ym => {
-          let colKeys = monthMap[ym];
-          let sum = 0;
-          let count = 0;
-          colKeys.forEach(ck => {
-            let val = parseNum(row[ck]);
-            if (val > 0) {
-              sum += val;
-              count++;
-            }
-          });
-          let avg = count > 0 ? Math.round(sum / count) : 0;
-          rowObj[ym] = avg;
-          if (avg > 0) allCellValues.push(avg);
+        cols.forEach(col => {
+          let v = parseNum(row[col.key]);
+          if (v > 0) allValues.push(v);
         });
-        processedData.push(rowObj);
       });
 
-      let minVal = allCellValues.length > 0 ? Math.min(...allCellValues) : 0;
-      let maxVal = allCellValues.length > 0 ? Math.max(...allCellValues) : 100;
+      let minVal = allValues.length > 0 ? Math.min(...allValues) : 0;
+      let maxVal = allValues.length > 0 ? Math.max(...allValues) : 100;
 
       let html = `<table class="w-full text-left border-collapse text-sm">
         <thead>
           <tr class="bg-slate-50 border-b text-slate-600 text-xs uppercase">
-            <th class="px-4 py-3 font-semibold border-r">類別 / 月份平均</th>`;
+            <th class="px-4 py-3 font-semibold border-r">類別</th>`;
       
-      monthList.forEach(ym => {
-        let [y, m] = ym.split('/');
-        html += `<th class="px-4 py-3 font-semibold text-center">${y}年${parseInt(m)}月 平均</th>`;
+      cols.forEach(col => {
+        html += `<th class="px-4 py-3 font-semibold text-center">${col.title}</th>`;
       });
       html += `</tr></thead><tbody class="divide-y divide-slate-100">`;
 
-      processedData.forEach(row => {
-        html += `<tr class="hover:bg-slate-50/50"><td class="px-4 py-3 font-medium text-slate-700 border-r bg-slate-50/30">${row.category}</td>`;
+      sheet.data.forEach(row => {
+        let catName = String(row[sheet.columns[0].key] || '未命名').trim();
+        html += `<tr class="hover:bg-slate-50/50"><td class="px-4 py-3 font-medium text-slate-700 border-r bg-slate-50/30">${catName}</td>`;
         
-        monthList.forEach(ym => {
-          let val = row[ym];
+        cols.forEach(col => {
+          let val = parseNum(row[col.key]);
           let bgStyle = 'background-color: transparent;';
+          
           if (val > 0 && maxVal !== minVal) {
             let ratio = (val - minVal) / (maxVal - minVal);
-            let r = Math.round(239 + (254 - 239) * ratio);
-            let g = Math.round(246 + (202 - 246) * ratio);
-            let b = Math.round(228 + (202 - 228) * ratio);
+            // 色彩漸層：從淺綠 (數值小) 到 大紅 (數值大)
+            // 淺綠: rgb(187, 247, 208), 大紅: rgb(252, 165, 165)
+            let r = Math.round(187 + (252 - 187) * ratio);
+            let g = Math.round(247 + (165 - 247) * ratio);
+            let b = Math.round(208 + (165 - 208) * ratio);
             bgStyle = `background-color: rgb(${r}, ${g}, ${b});`;
           } else if (val > 0) {
-            bgStyle = `background-color: rgb(254, 226, 226);`;
+            bgStyle = `background-color: rgb(252, 165, 165);`;
           }
 
           html += `<td class="px-4 py-3 text-center font-semibold" style="${bgStyle}">${val > 0 ? val.toLocaleString() : '-'}</td>`;
@@ -810,16 +775,15 @@
       const element = document.getElementById(`export-area-${chartId}`);
       if (!element) return;
       
-      // 截圖前暫時隱藏「匯出圖片」按鈕
       const btn = element.querySelector('.export-btn');
       if (btn) btn.style.display = 'none';
 
       html2canvas(element, { 
-        scale: 3, // 提高 3 倍解析度，使匯出的 PNG 畫質非常清晰、跟網頁一模一樣
+        scale: 3, 
         useCORS: true,
         backgroundColor: '#ffffff'
       }).then(canvas => {
-        if (btn) btn.style.display = ''; // 恢復按鈕顯示
+        if (btn) btn.style.display = '';
         const link = document.createElement('a');
         link.download = `${title}.png`;
         link.href = canvas.toDataURL('image/png', 1.0);

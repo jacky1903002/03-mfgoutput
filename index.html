@@ -129,19 +129,16 @@
           name: '石墨複合材占比',
           columns: [
             { key: 'category', title: '類別' },
-            { key: 'month', title: 'MMYY' },
-            { key: 'val', title: '數值' }
+            { key: 'm1', title: 'May-25' },
+            { key: 'm2', title: 'Jun-25' },
+            { key: 'm3', title: 'Jul-25' },
+            { key: 'm4', title: 'Aug-25' },
+            { key: 'm5', title: 'Sep-25' }
           ],
           data: [
-            { category: '石墨', month: 'May-25', val: 8500 },
-            { category: '複材', month: 'May-25', val: 10500 },
-            { category: '石墨加複材', month: 'May-25', val: 19000 },
-            { category: '石墨', month: 'Jun-25', val: 8600 },
-            { category: '複材', month: 'Jun-25', val: 8200 },
-            { category: '石墨加複材', month: 'Jun-25', val: 16800 },
-            { category: '石墨', month: 'Jul-25', val: 10500 },
-            { category: '複材', month: 'Jul-25', val: 10000 },
-            { category: '石墨加複材', month: 'Jul-25', val: 20500 }
+            { category: '石墨', m1: 8489, m2: 8474, m3: 10623, m4: 10722, m5: 10029 },
+            { category: '複材', m1: 10582, m2: 8292, m3: 10028, m4: 9038, m5: 9784 },
+            { category: '石墨加複材', m1: 19071, m2: 16766, m3: 20651, m4: 19760, m5: 19813 }
           ]
         }
       ]
@@ -274,8 +271,8 @@
         name: '新工作表 ' + (window.appState.sheets.length + 1),
         columns: [
           { key: 'category', title: '類別' },
-          { key: 'month', title: 'MMYY' },
-          { key: 'val', title: '數值' }
+          { key: 'm1', title: 'May-25' },
+          { key: 'm2', title: 'Jun-25' }
         ],
         data: []
       });
@@ -372,7 +369,7 @@
       if (!window.isAuthorizedEditor) { alert("需要管理者權限！"); return; }
       const sheet = window.appState.sheets.find(s => s.id === window.appState.currentSheetId);
       let newRow = {};
-      sheet.columns.forEach((c, idx) => newRow[c.key] = idx === 0 ? '石墨' : (idx === 1 ? 'May-25' : 0));
+      sheet.columns.forEach((c, idx) => newRow[c.key] = idx === 0 ? '新類別' : 0);
       sheet.data.push(newRow);
       renderApp();
       autoSaveToFirebase();
@@ -391,7 +388,7 @@
     window.addColumn = function() {
       if (!window.isAuthorizedEditor) { alert("需要管理者權限！"); return; }
       const sheet = window.appState.sheets.find(s => s.id === window.appState.currentSheetId);
-      const colTitle = prompt("請輸入新欄位標題：");
+      const colTitle = prompt("請輸入新欄位標題 (例如 Oct-25)：");
       if (!colTitle) return;
       const colKey = 'col_' + Date.now();
       sheet.columns.push({ key: colKey, title: colTitle });
@@ -473,7 +470,7 @@
         `;
         container.appendChild(wrapper);
 
-        buildThreeCategoryLineChart(sheet);
+        buildWideTableLineChart(sheet);
       }
     }
 
@@ -484,61 +481,45 @@
       return isNaN(n) ? 0 : n;
     }
 
-    function buildThreeCategoryLineChart(sheet) {
+    function buildWideTableLineChart(sheet) {
       const canvas = document.getElementById('canvas-sheet3');
       if (!canvas) return;
       if (window.chartInstances['sheet3']) window.chartInstances['sheet3'].destroy();
 
-      // 明確指定抓取第 2 個欄位（通常是 month / MMYY）作為 X 軸時間標籤
-      const monthKey = sheet.columns[1] ? sheet.columns[1].key : 'month';
-      const categoryKey = sheet.columns[0] ? sheet.columns[0].key : 'category';
-      const valKey = sheet.columns[2] ? sheet.columns[2].key : 'val';
-
+      // X 軸：從第 2 個欄位開始到最後，取其標題（例如 May-25, Jun-25 ...）作為 X 軸時間標籤
       let timeLabels = [];
-      sheet.data.forEach(r => {
-        let mVal = String(r[monthKey] || '').trim();
-        if (mVal && !timeLabels.includes(mVal)) {
-          timeLabels.push(mVal);
-        }
-      });
-      if (timeLabels.length === 0) timeLabels = ['May-25', 'Jun-25', 'Jul-25'];
+      for (let i = 1; i < sheet.columns.length; i++) {
+        timeLabels.push(sheet.columns[i].title);
+      }
 
-      let categories = [];
-      sheet.data.forEach(r => {
-        let cVal = String(r[categoryKey] || '').trim();
-        if (cVal && !categories.includes(cVal)) {
-          categories.push(cVal);
-        }
-      });
-      if (categories.length === 0) categories = ['石墨', '複材', '石墨加複材'];
-
+      // 每一列代表一個類別（石墨、複材、石墨加複材）
       const colorMap = {
-        '石墨': '#3b82f6',
-        '複材': '#f97316',
-        '石墨加複材': '#6b7280'
+        '石墨': '#3b82f6',     // 藍色
+        '複材': '#f97316',     // 橘色
+        '石墨加複材': '#6b7280' // 灰色
       };
       const fallbackColors = ['#3b82f6', '#f97316', '#6b7280', '#10b981', '#ef4444', '#8b5cf6'];
 
-      const datasets = categories.map((cat, idx) => {
-        const dataVals = timeLabels.map(t => {
-          const match = sheet.data.find(r => {
-            let cVal = String(r[categoryKey] || '').trim();
-            let mVal = String(r[monthKey] || '').trim();
-            return cVal === cat && mVal === t;
-          });
-          return match ? parseNum(match[valKey]) : 0;
-        });
+      const datasets = sheet.data.map((row, idx) => {
+        const catName = String(row[sheet.columns[0].key] || `類別${idx+1}`).trim();
+        
+        // 抓取該列在各個月份欄位對應的數值
+        const dataVals = [];
+        for (let i = 1; i < sheet.columns.length; i++) {
+          let colKey = sheet.columns[i].key;
+          dataVals.push(parseNum(row[colKey]));
+        }
 
-        const lineColor = colorMap[cat] || fallbackColors[idx % fallbackColors.length];
+        const lineColor = colorMap[catName] || fallbackColors[idx % fallbackColors.length];
 
         return {
-          label: cat,
+          label: catName,
           data: dataVals,
           borderColor: lineColor,
           backgroundColor: lineColor,
           tension: 0.1,
           borderWidth: 2,
-          pointRadius: 4,
+          pointRadius: 3,
           datalabels: { display: false }
         };
       });
@@ -774,20 +755,20 @@
       reader.onload = async function(e) {
         const data = new Uint8Array(e.target.result);
         const workbook = XLSX.read(data, { type: 'array' });
-        const sheetName = workbook.SheetNames[0];
+        const sheetName = workbook.SheetNames[2] || workbook.SheetNames[0]; // 預讀第三個工作表
         const worksheet = workbook.Sheets[sheetName];
         const json = XLSX.utils.sheet_to_json(worksheet);
         
         if (json.length > 0) {
           const keys = Object.keys(json[0]);
-          const columns = keys.map((k, i) => ({ key: i === 0 ? 'category' : (i === 1 ? 'month' : 'val'), title: k }));
+          const columns = keys.map((k, i) => ({ key: i === 0 ? 'category' : 'col_' + i, title: k }));
           const sheetData = json.map(row => {
             let rObj = {};
             keys.forEach((k, i) => { rObj[columns[i].key] = row[k]; });
             return rObj;
           });
 
-          const currentSheet = window.appState.sheets.find(s => s.id === window.appState.currentSheetId) || window.appState.sheets[0];
+          const currentSheet = window.appState.sheets.find(s => s.id === window.appState.currentSheetId) || window.appState.sheets[2];
           currentSheet.columns = columns;
           currentSheet.data = sheetData;
           

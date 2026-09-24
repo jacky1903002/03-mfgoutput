@@ -530,7 +530,7 @@
         return s26;
       });
 
-      // 2. Top1 排名計算：嚴格只累計到 2026 有資料的最後一個月份 (activeLimit)
+      // 2. Top1 排名計算：【關鍵修正】各年度一律只累加到 2026 有效的最後月份 (activeLimit) 以進行公平的同期總額比拼
       let rankSum23 = 0, rankSum24 = 0, rankSum25 = 0, rankSum26 = 0;
       for (let i = 0; i < activeLimit; i++) {
         rankSum23 += parseNum(rows[i]?.[k23]);
@@ -576,10 +576,10 @@
             datalabels: {
               align: 'top',
               formatter: (value, context) => {
-                // 修正：歷史年份只在對應的同期月份（activeLimit - 1）或 12 月顯示標籤；
-                // 為了避免 12 月出現奇怪的標籤，歷史年份的標籤改為對齊顯示在 2026 終止的那個月份（activeLimit - 1），
-                // 這樣可以跟 2026 做公平的同期數值比對。
-                if (value !== null && context.dataIndex === activeLimit - 1) {
+                if (value !== null && context.dataIndex === activeLimit - 1 && context.dataset.label === '2026') {
+                  return (value / 1000000).toFixed(1) + 'M';
+                }
+                if (value !== null && context.dataIndex === 11 && context.dataset.label !== '2026') {
                   return (value / 1000000).toFixed(1) + 'M';
                 }
                 return '';

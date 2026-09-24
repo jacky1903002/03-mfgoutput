@@ -399,7 +399,7 @@
     function renderCharts() {
       const container = document.getElementById('charts-container');
       container.innerHTML = '';
-      const sheetIndex = window.appState.sheets.findIndex(s => s.id === window.appState.currentSheetId);
+      const sheetIndex = window.appStawindow.exportChartToPNGte.sheets.findIndex(s => s.id === window.appState.currentSheetId);
       const sheet = window.appState.sheets[sheetIndex];
 
       if (sheetIndex === 0) {
@@ -784,27 +784,34 @@
     };
 
     window.exportChartToPNG = function(chartId, title) {
-      const element = document.getElementById(`export-area-${chartId}`);
-      if (!element) return;
-      
-      const btn = element.querySelector('.export-btn');
-      if (btn) btn.style.display = 'none';
+  const element = document.getElementById(`export-area-${chartId}`);
+  if (!element) return;
+  
+  // 1. 找出該區域內的匯出按鈕並隱藏，避免被拍進圖片裡
+  const btn = element.querySelector('.export-btn') || element.querySelector('button');
+  if (btn) btn.style.display = 'none';
 
-      html2canvas(element, { 
-        scale: 3, 
-        useCORS: true,
-        backgroundColor: '#ffffff'
-      }).then(canvas => {
-        if (btn) btn.style.display = '';
-        const link = document.createElement('a');
-        link.download = `${title}.png`;
-        link.href = canvas.toDataURL('image/png', 1.0);
-        link.click();
-      }).catch(() => {
-        if (btn) btn.style.display = '';
-        alert("匯出圖片失敗！");
-      });
-    };
+  // 2. 開始進行 canvas 截圖
+  html2canvas(element, { 
+    scale: 3, 
+    useCORS: true,
+    backgroundColor: '#ffffff'
+  }).then(canvas => {
+    // 3. 截圖完成後，立即把按鈕顯示回來
+    if (btn) btn.style.display = '';
+
+    // 4. 建立下載連結並自動儲存圖片
+    const link = document.createElement('a');
+    link.download = `${title}.png`;
+    link.href = canvas.toDataURL('image/png', 1.0);
+    link.click();
+  }).catch((err) => {
+    // 發生錯誤也要記得把按鈕復原
+    if (btn) btn.style.display = '';
+    console.error("匯出圖片失敗：", err);
+    alert("匯出圖片失敗！");
+  });
+};
   </script>
 </body>
 </html>

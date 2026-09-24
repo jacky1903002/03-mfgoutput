@@ -74,7 +74,6 @@
       <table id="app-table" class="w-full text-left border-collapse"></table>
     </div>
 
-    <!-- 圖表與熱力圖容器 -->
     <div id="charts-container" class="grid grid-cols-1 md:grid-cols-2 gap-6"></div>
   </main>
 
@@ -112,26 +111,6 @@
             { key: '2026', title: '2026' }
           ],
           data: []
-        },
-        {
-          id: 'sheet_2',
-          name: '線上WIP',
-          columns: [
-            { key: 'category', title: '類別' },
-            { key: 'm1', title: 'May-26' },
-            { key: 'm2', title: 'Jun-26' },
-            { key: 'm3', title: 'Jul-26' },
-            { key: 'm4', title: 'Aug-26' },
-            { key: 'm5', title: 'Sep-26' }
-          ],
-          data: [
-            { category: '線切割', m1: 10156, m2: 8961, m3: 9323, m4: 7795, m5: 7184 },
-            { category: '金屬一課', m1: 9074, m2: 10214, m3: 8821, m4: 10249, m5: 9021 },
-            { category: '金屬二課', m1: 9336, m2: 9281, m3: 7083, m4: 9006, m5: 8151 },
-            { category: '車床課', m1: 9569, m2: 7217, m3: 10264, m4: 10224, m5: 10435 },
-            { category: '最終檢驗', m1: 8461, m2: 9969, m3: 9074, m4: 8069, m5: 10773 },
-            { category: '後處理', m1: 9149, m2: 10443, m3: 7287, m4: 10605, m5: 9449 }
-          ]
         }
       ]
     };
@@ -182,7 +161,7 @@
     function loadFromFirebase() {
       db.ref('mfg_app_state').once('value').then(snapshot => {
         const val = snapshot.val();
-        if (val && val.sheets && val.sheets.length > 0) {
+        if (val && val.sheets && val.sheets.length > 0 && val.sheets[0].data.length > 0) {
           window.appState = val;
           localStorage.setItem('mfg_app_state_cache', JSON.stringify(window.appState));
         } else if (window.appState.sheets[0].data.length > 0) {
@@ -193,7 +172,7 @@
 
         db.ref('mfg_app_state').on('value', snap => {
           const liveVal = snap.val();
-          if (liveVal && liveVal.sheets && liveVal.sheets.length > 0) {
+          if (liveVal && liveVal.sheets && liveVal.sheets.length > 0 && liveVal.sheets[0].data.length > 0) {
             window.appState = liveVal;
             localStorage.setItem('mfg_app_state_cache', JSON.stringify(window.appState));
             renderApp();
@@ -324,7 +303,7 @@
       if (!window.isAuthorizedEditor) { alert("需要管理者權限！"); return; }
       const sheet = window.appState.sheets.find(s => s.id === window.appState.currentSheetId);
       let newRow = {};
-      sheet.columns.forEach((c, idx) => newRow[c.key] = idx === 0 ? '新部門' : 0);
+      sheet.columns.forEach((c, idx) => newRow[c.key] = idx === 0 ? '石墨' : (idx === 1 ? 'Jan' : 0));
       sheet.data.push(newRow);
       renderApp();
       autoSaveToFirebase();
@@ -343,7 +322,7 @@
     window.addColumn = function() {
       if (!window.isAuthorizedEditor) { alert("需要管理者權限！"); return; }
       const sheet = window.appState.sheets.find(s => s.id === window.appState.currentSheetId);
-      const colTitle = prompt("請輸入新欄位標題 (例: Oct-26)：");
+      const colTitle = prompt("請輸入新欄位標題 (例: 2027)：");
       if (!colTitle) return;
       const colKey = 'col_' + Date.now();
       sheet.columns.push({ key: colKey, title: colTitle });
@@ -380,31 +359,13 @@
     };
 
     // ==========================================
-    // 3. 圖表與熱力圖引擎
+    // 3. 圖表引擎 (僅保留氣球 📍 符號)
     // ==========================================
     function renderCharts() {
       const container = document.getElementById('charts-container');
       container.innerHTML = '';
       const sheet = window.appState.sheets.find(s => s.id === window.appState.currentSheetId);
-      if (!sheet) return;
-
-      // 判斷當前是第一個工作表（產值分析）還是第二個工作表（線上WIP等其他）
-      if (sheet.id === 'sheet_1' || sheet.columns.length > 5 && sheet.columns[2]?.title?.match(/20\d\d/)) {
-        renderDefaultProductionCharts(sheet);
-      } else {
-        renderGenericAnalysisCharts(sheet);
-      }
-    }
-
-    function parseNum(val) {
-      if (val === undefined || val === null || val === '') return 0;
-      let s = String(val).replace(/[^0-9.-]/g, '');
-      let n = parseFloat(s);
-      return isNaN(n) ? 0 : n;
-    }
-
-    // 預設產值分析圖表
-    function renderDefaultProductionCharts(sheet) {
+      
       const chartIds = ['sc1', 'sc2', 'sc3', 'sc4', 'sc5', 'sc6', 'sc7', 'sc8'];
       const chartTitles = ['產值同期比較(石墨)', '產值同期比較(鎢鉬鉭)', '產值同期比較(other)', '產值同期比較(合計)', '石墨累積產值', '鎢鉬鉭累積產值', 'other累積產值', '合計累積產值'];
 
@@ -424,141 +385,18 @@
         container.appendChild(wrapper);
       });
 
-      buildAllEightComparisonCharts(sheet);
+      if (sheet) {
+        buildAllEightComparisonCharts(sheet);
+      }
     }
 
-    // 第二個工作表：動態產生趨勢圖與熱力圖 (Heatmap Table)
-    function renderGenericAnalysisCharts(sheet) {
-      const wrapper1 = document.createElement('div');
-      wrapper1.className = 'bg-white p-5 rounded-xl shadow-sm border flex flex-col md:col-span-2';
-      wrapper1.id = 'export-area-generic-trend';
-      wrapper1.innerHTML = `
-        <div class="flex justify-between items-center mb-4">
-          <h3 class="font-semibold text-slate-700 text-sm">${sheet.name} - 各類別趨勢分析</h3>
-          <button onclick="window.exportChartToPNG('generic-trend', '${sheet.name}-趨勢分析')" class="text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 px-2.5 py-1 rounded transition">匯出圖片</button>
-        </div>
-        <div class="relative h-80 w-full">
-          <canvas id="canvas-generic-trend"></canvas>
-        </div>
-      `;
-      container.appendChild(wrapper1);
-
-      // 熱力圖區塊
-      const wrapper2 = document.createElement('div');
-      wrapper2.id = 'export-area-generic-heatmap';
-      wrapper2.className = 'bg-white p-5 rounded-xl shadow-sm border flex flex-col md:col-span-2';
-      
-      let colHeaders = sheet.columns.slice(1); // 略過類別
-      let html = `
-        <div class="flex justify-between items-center mb-4">
-          <h3 class="font-semibold text-slate-700 text-sm">${sheet.name} - 各類別熱力圖 (Heatmap)</h3>
-          <button onclick="window.exportChartToPNG('generic-heatmap', '${sheet.name}-熱力圖')" class="text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 px-2.5 py-1 rounded transition">匯出圖片</button>
-        </div>
-        <div class="overflow-x-auto">
-          <table class="w-full text-center border-collapse text-sm">
-            <thead>
-              <tr class="bg-slate-50 text-slate-600 border-b">
-                <th class="p-3 text-left">類別 / 月份</th>
-                ${colHeaders.map(c => `<th class="p-3">${c.title}</th>`).join('')}
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-slate-100">
-      `;
-
-      // 計算數值最大最小值以決定熱力顏色深度
-      let allVals = [];
-      sheet.data.forEach(r => {
-        colHeaders.forEach(c => allVals.push(parseNum(r[c.key])));
-      });
-      let maxVal = Math.max(...allVals, 1);
-      let minVal = Math.min(...allVals, 0);
-
-      sheet.data.forEach(row => {
-        let catName = row.category || row[sheet.columns[0].key] || '未命名';
-        html += `<tr><td class="p-3 text-left font-medium text-slate-700 bg-slate-50/50">${catName}</td>`;
-        colHeaders.forEach(c => {
-          let v = parseNum(row[c.key]);
-          // 計算比例 (0~1)
-          let ratio = maxVal === minVal ? 0.5 : (v - minVal) / (maxVal - minVal);
-          // 產生紅橘色系的背景色 (數值越高顏色越紅深)
-          let bgColor = `rgba(239, 68, 68, ${Math.max(0.08, ratio * 0.85)})`;
-          let textColor = ratio > 0.5 ? 'text-white font-bold' : 'text-slate-800';
-          if(ratio > 0.5) {
-            bgColor = `rgba(220, 38, 38, ${ratio})`;
-          }
-          html += `<td class="p-3 transition" style="background-color: ${bgColor};"><span class="${textColor}">${v.toLocaleString()}</span></td>`;
-        });
-        html += `</tr>`;
-      });
-
-      html += `</tbody></table></div>`;
-      wrapper2.innerHTML = html;
-      container.appendChild(wrapper2);
-
-      // 繪製趨勢圖
-      drawGenericTrendChart(sheet, colHeaders);
+    function parseNum(val) {
+      if (val === undefined || val === null || val === '') return 0;
+      let s = String(val).replace(/[^0-9.-]/g, '');
+      let n = parseFloat(s);
+      return isNaN(n) ? 0 : n;
     }
 
-    function drawGenericTrendChart(sheet, colHeaders) {
-      const canvas = document.getElementById('canvas-generic-trend');
-      if (!canvas) return;
-      if (window.chartInstances['generic-trend']) window.chartInstances['generic-trend'].destroy();
-
-      const labels = colHeaders.map(c => c.title);
-      const colors = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316'];
-
-      const datasets = sheet.data.map((row, idx) => {
-        let catName = row.category || row[sheet.columns[0].key] || `類別${idx+1}`;
-        let dataVals = colHeaders.map(c => parseNum(row[c.key]));
-        return {
-          label: catName,
-          data: dataVals,
-          borderColor: colors[idx % colors.length],
-          backgroundColor: colors[idx % colors.length],
-          tension: 0.1
-        };
-      });
-
-      const weAreHereGenericPlugin = {
-        id: 'weAreHereGenericPlugin',
-        afterDatasetsDraw(chart) {
-          const { ctx } = chart;
-          chart.data.datasets.forEach((dataset, datasetIndex) => {
-            const meta = chart.getDatasetMeta(datasetIndex);
-            if (!meta || meta.hidden) return;
-            const lastIndex = meta.data.length - 1;
-            const point = meta.data[lastIndex];
-            if (!point) return;
-
-            ctx.save();
-            ctx.font = 'bold 13px sans-serif';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'bottom';
-            ctx.fillText('📍', point.x, point.y - 10);
-            ctx.restore();
-          });
-        }
-      };
-
-      window.chartInstances['generic-trend'] = new Chart(canvas, {
-        type: 'line',
-        data: { labels, datasets },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          layout: {
-            padding: { top: 35, right: 25 }
-          },
-          plugins: {
-            legend: { position: 'top' },
-            title: { display: false }
-          }
-        },
-        plugins: [weAreHereGenericPlugin]
-      });
-    }
-
-    // 第一個工作表的 8 張比較圖
     function buildAllEightComparisonCharts(sheet) {
       const activeMonths = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug"];
       const materials = ["石墨", "鎢鉬鉭", "other"];
@@ -578,8 +416,12 @@
         return sheet.data.filter(r => {
           let cat = String(r.category || r[sheet.columns[0].key] || '').trim().toLowerCase();
           let mLower = mat.toLowerCase();
-          if (mLower === "鎢鉬鉭") return cat.includes("鎢鉬鉭") || cat.includes("鎢鉬鈕");
-          if (mLower === "other") return cat.includes("other") || cat.includes("其他");
+          if (mLower === "鎢鉬鉭") {
+            return cat.includes("鎢鉬鉭") || cat.includes("鎢鉬鈕");
+          }
+          if (mLower === "other") {
+            return cat.includes("other") || cat.includes("其他");
+          }
           return cat.includes(mLower);
         });
       };
@@ -624,40 +466,50 @@
       return combined;
     }
 
+    // 專用 Plugin：僅繪製氣球 📍 於 Aug 的 2026 紅色柱子正上方
     const weAreHereBarPlugin = {
       id: 'weAreHereBarPlugin',
       afterDatasetsDraw(chart) {
         const { ctx } = chart;
-        const meta = chart.getDatasetMeta(3);
+        const meta = chart.getDatasetMeta(3); // 2026 是第 4 個 dataset (index 3)
         if (!meta || meta.hidden) return;
+
         const lastIndex = meta.data.length - 1;
         const bar = meta.data[lastIndex];
         if (!bar) return;
 
+        const x = bar.x; 
+        const y = bar.y - 12; // 柱子頂部上方 12px
+
         ctx.save();
         ctx.font = 'bold 14px sans-serif';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'bottom';
-        ctx.fillText('📍', bar.x, bar.y - 12);
+        ctx.fillText('📍', x, y);
         ctx.restore();
       }
     };
 
+    // 專用 Plugin：僅繪製氣球 📍 於折線圖最後一個點上方
     const weAreHereLinePlugin = {
       id: 'weAreHereLinePlugin',
       afterDatasetsDraw(chart) {
         const { ctx } = chart;
-        const meta = chart.getDatasetMeta(3);
+        const meta = chart.getDatasetMeta(3); // 2026 折線是第 4 個 dataset (index 3)
         if (!meta || meta.hidden) return;
+
         const lastIndex = meta.data.length - 1;
         const point = meta.data[lastIndex];
         if (!point) return;
+
+        const x = point.x;
+        const y = point.y - 12;
 
         ctx.save();
         ctx.font = 'bold 14px sans-serif';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'bottom';
-        ctx.fillText('📍', point.x, point.y - 12);
+        ctx.fillText('📍', x, y);
         ctx.restore();
       }
     };
@@ -681,8 +533,16 @@
         options: {
           responsive: true,
           maintainAspectRatio: false,
-          layout: { padding: { top: 35, right: 25 } },
-          plugins: { legend: { position: 'top' }, title: { display: false } }
+          layout: {
+            padding: {
+              top: 35,
+              right: 25
+            }
+          },
+          plugins: { 
+            legend: { position: 'top' }, 
+            title: { display: false, text: titleText }
+          }
         },
         plugins: [weAreHereBarPlugin]
       });
@@ -700,9 +560,13 @@
       const data26 = activeMonths.map((_, i) => { s26 += parseNum(rows[i]?.[k26]); return s26; });
 
       const totals = [
-        { year: l23, val: s23 }, { year: l24, val: s24 }, { year: l25, val: s25 }, { year: l26, val: s26 }
+        { year: l23, val: s23 },
+        { year: l24, val: s24 },
+        { year: l25, val: s25 },
+        { year: l26, val: s26 }
       ];
       totals.sort((a, b) => b.val - a.val);
+
       const yoyVal = s25 > 0 ? ((s26 - s25) / s25 * 100).toFixed(1) : 0;
 
       const titleEl = document.getElementById(`title-${chartId}`);
@@ -724,8 +588,16 @@
         options: {
           responsive: true,
           maintainAspectRatio: false,
-          layout: { padding: { top: 35, right: 25 } },
-          plugins: { legend: { position: 'top' }, title: { display: false } }
+          layout: {
+            padding: {
+              top: 35,
+              right: 25
+            }
+          },
+          plugins: { 
+            legend: { position: 'top' }, 
+            title: { display: false }
+          }
         },
         plugins: [weAreHereLinePlugin]
       });
@@ -759,7 +631,7 @@
         
         if (json.length > 0) {
           const keys = Object.keys(json[0]);
-          const columns = keys.map((k, i) => ({ key: i === 0 ? 'category' : ('col_' + i), title: k }));
+          const columns = keys.map((k, i) => ({ key: i === 0 ? 'category' : (i === 1 ? 'month' : k), title: k }));
           const sheetData = json.map(row => {
             let rObj = {};
             keys.forEach((k, i) => { rObj[columns[i].key] = row[k]; });

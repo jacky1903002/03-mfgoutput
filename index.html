@@ -138,7 +138,10 @@
             { category: '石墨加複材', month: 'May-25', val: 19000 },
             { category: '石墨', month: 'Jun-25', val: 8600 },
             { category: '複材', month: 'Jun-25', val: 8200 },
-            { category: '石墨加複材', month: 'Jun-25', val: 16800 }
+            { category: '石墨加複材', month: 'Jun-25', val: 16800 },
+            { category: '石墨', month: 'Jul-25', val: 10500 },
+            { category: '複材', month: 'Jul-25', val: 10000 },
+            { category: '石墨加複材', month: 'Jul-25', val: 20500 }
           ]
         }
       ]
@@ -310,7 +313,6 @@
       thead.appendChild(headerTr);
       table.appendChild(thead);
 
-      // 只有第二個工作表 (sheetIndex === 1，即「線上WIP」) 才計算並顯示熱力圖
       let colExtremes = {};
       if (sheetIndex === 1) {
         sheet.columns.forEach((col, cIdx) => {
@@ -335,7 +337,6 @@
           td.className = 'px-4 py-2.5 transition-colors duration-200';
           let val = row[col.key] !== undefined ? row[col.key] : '';
 
-          // 只有第二個工作表套用熱力圖色彩
           if (sheetIndex === 1 && cIdx >= 1 && colExtremes[col.key]) {
             let numVal = parseNum(val);
             let { min, max } = colExtremes[col.key];
@@ -436,7 +437,6 @@
       const sheet = window.appState.sheets[sheetIndex];
 
       if (sheetIndex === 0) {
-        // 第一個工作表：顯示 8 張產值分析圖表
         const chartIds = ['sc1', 'sc2', 'sc3', 'sc4', 'sc5', 'sc6', 'sc7', 'sc8'];
         const chartTitles = ['產值同期比較(石墨)', '產值同期比較(鎢鉬鉭)', '產值同期比較(other)', '產值同期比較(合計)', '石墨累積產值', '鎢鉬鉭累積產值', 'other累積產值', '合計累積產值'];
 
@@ -459,7 +459,6 @@
         if (sheet) buildAllEightComparisonCharts(sheet);
 
       } else if (sheetIndex === 2) {
-        // 第三個工作表：時間對三類別的折線圖
         const wrapper = document.createElement('div');
         wrapper.className = 'bg-white p-5 rounded-xl shadow-sm border flex flex-col md:col-span-2';
         wrapper.id = `export-area-sheet3`;
@@ -490,42 +489,43 @@
       if (!canvas) return;
       if (window.chartInstances['sheet3']) window.chartInstances['sheet3'].destroy();
 
-      // 收集所有不重複的時間/月份 (X軸)，維持資料輸入順序
+      // 明確指定抓取第 2 個欄位（通常是 month / MMYY）作為 X 軸時間標籤
+      const monthKey = sheet.columns[1] ? sheet.columns[1].key : 'month';
+      const categoryKey = sheet.columns[0] ? sheet.columns[0].key : 'category';
+      const valKey = sheet.columns[2] ? sheet.columns[2].key : 'val';
+
       let timeLabels = [];
       sheet.data.forEach(r => {
-        let mVal = String(r.month || r[sheet.columns[1]?.key] || '').trim();
+        let mVal = String(r[monthKey] || '').trim();
         if (mVal && !timeLabels.includes(mVal)) {
           timeLabels.push(mVal);
         }
       });
-      if (timeLabels.length === 0) timeLabels = ['May-25', 'Jun-25', 'Jul-25', 'Aug-25', 'Sep-25'];
+      if (timeLabels.length === 0) timeLabels = ['May-25', 'Jun-25', 'Jul-25'];
 
-      // 收集所有不重複的類別 (作為多條折線)
       let categories = [];
       sheet.data.forEach(r => {
-        let cVal = String(r.category || r[sheet.columns[0]?.key] || '').trim();
+        let cVal = String(r[categoryKey] || '').trim();
         if (cVal && !categories.includes(cVal)) {
           categories.push(cVal);
         }
       });
       if (categories.length === 0) categories = ['石墨', '複材', '石墨加複材'];
 
-      // 對應指定顏色或預設顏色
       const colorMap = {
-        '石墨': '#3b82f6',     // 藍色
-        '複材': '#f97316',     // 橘色
-        '石墨加複材': '#6b7280' // 灰色
+        '石墨': '#3b82f6',
+        '複材': '#f97316',
+        '石墨加複材': '#6b7280'
       };
       const fallbackColors = ['#3b82f6', '#f97316', '#6b7280', '#10b981', '#ef4444', '#8b5cf6'];
 
       const datasets = categories.map((cat, idx) => {
         const dataVals = timeLabels.map(t => {
           const match = sheet.data.find(r => {
-            let cVal = String(r.category || r[sheet.columns[0]?.key] || '').trim();
-            let mVal = String(r.month || r[sheet.columns[1]?.key] || '').trim();
+            let cVal = String(r[categoryKey] || '').trim();
+            let mVal = String(r[monthKey] || '').trim();
             return cVal === cat && mVal === t;
           });
-          const valKey = sheet.columns[2] ? sheet.columns[2].key : 'val';
           return match ? parseNum(match[valKey]) : 0;
         });
 
@@ -538,7 +538,7 @@
           backgroundColor: lineColor,
           tension: 0.1,
           borderWidth: 2,
-          pointRadius: 3,
+          pointRadius: 4,
           datalabels: { display: false }
         };
       });

@@ -319,8 +319,6 @@
       thead.appendChild(headerTr);
       table.appendChild(thead);
 
-      let colExtremes = {};
-      // 如果是產值分析 (sheetIndex === 0) 保留原樣；若不是則維持一般可編輯
       const tbody = document.createElement('tbody');
       tbody.className = 'divide-y divide-slate-100 text-sm';
       sheet.data.forEach((row, rowIdx) => {
@@ -437,7 +435,7 @@
           <div class="flex justify-between items-center mb-4">
             <div>
               <h3 class="font-bold text-slate-800 text-lg">線上WIP - 每月平均熱力表</h3>
-              <p class="text-xs text-slate-500 mt-0.5">自動將每日數據按月份加總平均，並以顏色深淺呈現各部門表現</p>
+              <p class="text-xs text-slate-500 mt-0.5">自動將每日數據彙整為「月份平均」，並以顏色深淺呈現各部門表現</p>
             </div>
             <button onclick="window.exportChartToPNG('sheet2-heatmap', 'WIP每月平均熱力表')" class="text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 px-3 py-1.5 rounded transition">匯出圖片</button>
           </div>
@@ -473,20 +471,17 @@
       return isNaN(n) ? 0 : n;
     }
 
-    // 建立 WIP 每月平均熱力表
+    // 建立 WIP 每月平均熱力表（欄位只顯示月份平均，如 2026/05 平均）
     function buildWipMonthlyHeatmap(sheet) {
       const container = document.getElementById('heatmap-container');
       if (!container) return;
 
-      // 1. 收集所有月份並分類每日數據
-      // 假設標題格式為 YYYY/M/D 或 YYYY/MM/DD
       let monthMap = {}; // { '2026/05': [colKey1, colKey2, ...] }
       let monthList = [];
 
       for (let i = 1; i < sheet.columns.length; i++) {
         let col = sheet.columns[i];
         let title = col.title.trim();
-        // 嘗試解析出 年/月
         let parts = title.split(/[\/\-]/);
         if (parts.length >= 2) {
           let year = parts[0];
@@ -507,8 +502,7 @@
         return;
       }
 
-      // 2. 計算每個類別在每個月的平均值
-      let processedData = []; // [{ category: '線切割', '2026/05': 8540, ... }]
+      let processedData = [];
       let allCellValues = [];
 
       sheet.data.forEach(row => {
@@ -533,18 +527,17 @@
         processedData.push(rowObj);
       });
 
-      // 計算全域數值範圍以供熱力著色
       let minVal = allCellValues.length > 0 ? Math.min(...allCellValues) : 0;
       let maxVal = allCellValues.length > 0 ? Math.max(...allCellValues) : 100;
 
-      // 3. 建立 HTML 表格呈現熱力圖
       let html = `<table class="w-full text-left border-collapse text-sm">
         <thead>
           <tr class="bg-slate-50 border-b text-slate-600 text-xs uppercase">
             <th class="px-4 py-3 font-semibold border-r">類別 / 月份平均</th>`;
       
       monthList.forEach(ym => {
-        html += `<th class="px-4 py-3 font-semibold text-center">${ym} 平均</th>`;
+        let [y, m] = ym.split('/');
+        html += `<th class="px-4 py-3 font-semibold text-center">${y}年${parseInt(m)}月 平均</th>`;
       });
       html += `</tr></thead><tbody class="divide-y divide-slate-100">`;
 
@@ -553,11 +546,9 @@
         
         monthList.forEach(ym => {
           let val = row[ym];
-          // 計算熱力顏色 (數值越高顏色越深紅/橘，越低越綠)
           let bgStyle = 'background-color: transparent;';
           if (val > 0 && maxVal !== minVal) {
             let ratio = (val - minVal) / (maxVal - minVal);
-            // 漸層色：從淺綠 (ratio=0) 到淺紅 (ratio=1)
             let r = Math.round(239 + (254 - 239) * ratio);
             let g = Math.round(246 + (202 - 246) * ratio);
             let b = Math.round(228 + (202 - 228) * ratio);

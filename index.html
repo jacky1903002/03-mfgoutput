@@ -286,11 +286,12 @@
       thead.appendChild(headerTr);
       table.appendChild(thead);
 
-      // 若為第二個工作表以後（例如索引 > 0），計算各欄位的最大值與最小值以支援熱力圖
+      // 若為第二個工作表以後（索引 > 0），自動計算所有數值欄位的最大值與最小值
       let colExtremes = {};
       if (sheetIndex > 0) {
         sheet.columns.forEach((col, cIdx) => {
-          if (cIdx >= 2) { // 從第 3 欄開始計算數值範圍
+          // 從第 2 欄開始（索引 >= 1），排除通常為文字類別的第一欄
+          if (cIdx >= 1) {
             let vals = sheet.data.map(row => parseNum(row[col.key])).filter(v => v !== 0);
             if (vals.length > 0) {
               colExtremes[col.key] = {
@@ -311,20 +312,29 @@
           td.className = 'px-4 py-2.5 transition-colors duration-200';
           let val = row[col.key] !== undefined ? row[col.key] : '';
 
-          // 若為第二個工作表且為數值欄位，計算熱力圖背景色
-          if (sheetIndex > 0 && cIdx >= 2 && colExtremes[col.key]) {
+          // 若為第二個工作表且符合數值欄位，計算高對比熱力圖背景色
+          if (sheetIndex > 0 && cIdx >= 1 && colExtremes[col.key]) {
             let numVal = parseNum(val);
             let { min, max } = colExtremes[col.key];
             if (max !== min && numVal > 0) {
-              // 比例 0 (最小) 到 1 (最大)
               let ratio = (numVal - min) / (max - min);
-              // 淺綠色 (187, 247, 208) 到 紅色 (254, 202, 202) 漸層
-              let r = Math.round(187 + (254 - 187) * ratio);
-              let g = Math.round(247 + (202 - 247) * ratio);
-              let b = Math.round(208 + (202 - 208) * ratio);
+              let r, g, b;
+              if (ratio <= 0.5) {
+                // 從深綠色 (134, 239, 172) 到 柔和過渡色 (254, 240, 138)
+                let subRatio = ratio * 2;
+                r = Math.round(134 + (254 - 134) * subRatio);
+                g = Math.round(239 + (240 - 239) * subRatio);
+                b = Math.round(172 + (138 - 172) * subRatio);
+              } else {
+                // 從柔和過渡色 (254, 240, 138) 到 高鮮豔紅色 (239, 68, 68)
+                let subRatio = (ratio - 0.5) * 2;
+                r = Math.round(254 + (239 - 254) * subRatio);
+                g = Math.round(240 + (68 - 240) * subRatio);
+                b = Math.round(138 + (68 - 138) * subRatio);
+              }
               td.style.backgroundColor = `rgb(${r}, ${g}, ${b})`;
             } else if (numVal > 0 && max === min) {
-              td.style.backgroundColor = 'rgb(220, 252, 231)';
+              td.style.backgroundColor = 'rgb(187, 247, 208)';
             }
           }
 
@@ -403,7 +413,6 @@
       container.innerHTML = '';
       const sheetIndex = window.appState.sheets.findIndex(s => s.id === window.appState.currentSheetId);
       
-      // 若非第一個工作表，不渲染下方圖表區
       if (sheetIndex > 0) return;
 
       const sheet = window.appState.sheets[sheetIndex];

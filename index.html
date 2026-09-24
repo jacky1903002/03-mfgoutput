@@ -361,7 +361,7 @@
     };
 
     // ==========================================
-    // 3. 圖表引擎 (嚴格限制 2026 只到 8 月，不顯示任何浮動數值標籤)
+    // 3. 圖表引擎 (橫軸強制只顯示 Jan ~ Aug，隱藏 9-12 月)
     // ==========================================
     function renderCharts() {
       const container = document.getElementById('charts-container');
@@ -400,7 +400,8 @@
     }
 
     function buildAllEightComparisonCharts(sheet) {
-      const allMonths = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+      // 僅取前 8 個月 (Jan ~ Aug)，直接將 9-12 月從圖表中裁切掉
+      const activeMonths = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug"];
       const materials = ["石墨", "鎢鉬鉭", "other"];
 
       const numCols = sheet.columns.slice(2);
@@ -428,26 +429,24 @@
         });
       };
 
-      // 嚴格將 2026 年的有效資料月份限制在前 8 個月 (索引 0~7，即 Jan ~ Aug)
-      const activeLimit = 8;
+      materials.forEach((mat, idx) => {
+        let rows = getMaterialRows(mat);
+        drawBarComparisonChart(`sc${idx+1}`, rows, `${mat}產值同期比較`, k23, k24, k25, k26, label23, label24, label25, label26, activeMonths);
+      });
+      drawBarComparisonChart('sc4', getCombinedRowsForActiveMonths(materials, sheet, k23, k24, k25, k26, activeMonths), '合計產值同期比較', k23, k24, k25, k26, label23, label24, label25, label26, activeMonths);
 
       materials.forEach((mat, idx) => {
         let rows = getMaterialRows(mat);
-        drawBarComparisonChart(`sc${idx+1}`, rows, `${mat}產值同期比較`, k23, k24, k25, k26, label23, label24, label25, label26, activeLimit);
+        drawCumulativeLineChart(`sc${idx+5}`, rows, `${mat}累積產值`, k23, k24, k25, k26, label23, label24, label25, label26, activeMonths);
       });
-      drawBarComparisonChart('sc4', getCombinedRowsForAllMonths(materials, sheet, k23, k24, k25, k26), '合計產值同期比較', k23, k24, k25, k26, label23, label24, label25, label26, activeLimit);
-
-      materials.forEach((mat, idx) => {
-        let rows = getMaterialRows(mat);
-        drawCumulativeLineChart(`sc${idx+5}`, rows, `${mat}累積產值`, k23, k24, k25, k26, label23, label24, label25, label26, activeLimit);
-      });
-      drawCumulativeLineChart('sc8', getCombinedRowsForAllMonths(materials, sheet, k23, k24, k25, k26), '合計累積產值', k23, k24, k25, k26, label23, label24, label25, label26, activeLimit);
+      drawCumulativeLineChart('sc8', getCombinedRowsForActiveMonths(materials, sheet, k23, k24, k25, k26, activeMonths), '合計累積產值', k23, k24, k25, k26, label23, label24, label25, label26, activeMonths);
     }
 
-    function getCombinedRowsForAllMonths(materials, sheet, k23, k24, k25, k26) {
-      const allMonths = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    function getCombinedRowsForActiveMonths(materials, sheet, k23, k24, k25, k26, activeMonths) {
+      const allMonthsMap = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
       let combined = [];
-      allMonths.forEach((m, idx) => {
+      activeMonths.forEach((m) => {
+        let origIdx = allMonthsMap.indexOf(m);
         let rowObj = { month: m, [k23]: 0, [k24]: 0, [k25]: 0, [k26]: 0 };
         materials.forEach(mat => {
           let mRows = sheet.data.filter(r => {
@@ -457,7 +456,7 @@
             if (mLower === "other") return cat.includes("other") || cat.includes("其他");
             return cat.includes(mLower);
           });
-          let target = mRows[idx];
+          let target = mRows[origIdx];
           if (target) {
             rowObj[k23] += parseNum(target[k23]);
             rowObj[k24] += parseNum(target[k24]);
@@ -470,30 +469,20 @@
       return combined;
     }
 
-    function drawBarComparisonChart(chartId, rows, titleText, k23, k24, k25, k26, l23, l24, l25, l26, activeLimit) {
+    function drawBarComparisonChart(chartId, rows, titleText, k23, k24, k25, k26, l23, l24, l25, l26, activeMonths) {
       const canvas = document.getElementById(`canvas-${chartId}`);
       if (!canvas) return;
       if (window.chartInstances[chartId]) window.chartInstances[chartId].destroy();
 
-      const allMonths = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-      
       window.chartInstances[chartId] = new Chart(canvas, {
         type: 'bar',
         data: {
-          labels: allMonths,
+          labels: activeMonths,
           datasets: [
-            { label: l23, data: allMonths.map((_, i) => parseNum(rows[i]?.[k23])), backgroundColor: '#10b981' },
-            { label: l24, data: allMonths.map((_, i) => parseNum(rows[i]?.[k24])), backgroundColor: '#3b82f6' },
-            { label: l25, data: allMonths.map((_, i) => parseNum(rows[i]?.[k25])), backgroundColor: '#f59e0b' },
-            { 
-              label: l26, 
-              data: allMonths.map((_, i) => { 
-                if (i >= activeLimit) return null; // 超過 8 月直接設為 null
-                let v = parseNum(rows[i]?.[k26]); 
-                return v > 0 ? v : null; 
-              }), 
-              backgroundColor: '#ef4444' 
-            }
+            { label: l23, data: activeMonths.map((_, i) => parseNum(rows[i]?.[k23])), backgroundColor: '#10b981' },
+            { label: l24, data: activeMonths.map((_, i) => parseNum(rows[i]?.[k24])), backgroundColor: '#3b82f6' },
+            { label: l25, data: activeMonths.map((_, i) => parseNum(rows[i]?.[k25])), backgroundColor: '#f59e0b' },
+            { label: l26, data: activeMonths.map((_, i) => parseNum(rows[i]?.[k26])), backgroundColor: '#ef4444' }
           ]
         },
         options: {
@@ -502,49 +491,32 @@
           plugins: { 
             legend: { position: 'top' }, 
             title: { display: false, text: titleText },
-            datalabels: { display: false } // 確保不顯示數值標籤
+            datalabels: { display: false }
           }
         }
       });
     }
 
-    function drawCumulativeLineChart(chartId, rows, titleText, k23, k24, k25, k26, l23, l24, l25, l26, activeLimit) {
+    function drawCumulativeLineChart(chartId, rows, titleText, k23, k24, k25, k26, l23, l24, l25, l26, activeMonths) {
       const canvas = document.getElementById(`canvas-${chartId}`);
       if (!canvas) return;
       if (window.chartInstances[chartId]) window.chartInstances[chartId].destroy();
 
-      const allMonths = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-      
       let s23 = 0, s24 = 0, s25 = 0, s26 = 0;
-      const data23 = allMonths.map((_, i) => { s23 += parseNum(rows[i]?.[k23]); return s23; });
-      const data24 = allMonths.map((_, i) => { s24 += parseNum(rows[i]?.[k24]); return s24; });
-      const data25 = allMonths.map((_, i) => { s25 += parseNum(rows[i]?.[k25]); return s25; });
-      
-      // 關鍵：索引 >= 8 (即 9~12 月) 的 2026 資料強制回傳 null，線條在 8 月精準斷開
-      const data26 = allMonths.map((_, i) => {
-        if (i >= activeLimit) return null;
-        let val = parseNum(rows[i]?.[k26]);
-        s26 += val;
-        return s26;
-      });
-
-      let periodSum23 = 0, periodSum24 = 0, periodSum25 = 0, periodSum26 = 0;
-      for (let i = 0; i < activeLimit; i++) {
-        periodSum23 += parseNum(rows[i]?.[k23]);
-        periodSum24 += parseNum(rows[i]?.[k24]);
-        periodSum25 += parseNum(rows[i]?.[k25]);
-        periodSum26 += parseNum(rows[i]?.[k26]);
-      }
+      const data23 = activeMonths.map((_, i) => { s23 += parseNum(rows[i]?.[k23]); return s23; });
+      const data24 = activeMonths.map((_, i) => { s24 += parseNum(rows[i]?.[k24]); return s24; });
+      const data25 = activeMonths.map((_, i) => { s25 += parseNum(rows[i]?.[k25]); return s25; });
+      const data26 = activeMonths.map((_, i) => { s26 += parseNum(rows[i]?.[k26]); return s26; });
 
       const totals = [
-        { year: l23, val: periodSum23 },
-        { year: l24, val: periodSum24 },
-        { year: l25, val: periodSum25 },
-        { year: l26, val: periodSum26 }
+        { year: l23, val: s23 },
+        { year: l24, val: s24 },
+        { year: l25, val: s25 },
+        { year: l26, val: s26 }
       ];
       totals.sort((a, b) => b.val - a.val);
 
-      const yoyVal = periodSum25 > 0 ? ((periodSum26 - periodSum25) / periodSum25 * 100).toFixed(1) : 0;
+      const yoyVal = s25 > 0 ? ((s26 - s25) / s25 * 100).toFixed(1) : 0;
 
       const titleEl = document.getElementById(`title-${chartId}`);
       if (titleEl) {
@@ -554,12 +526,12 @@
       window.chartInstances[chartId] = new Chart(canvas, {
         type: 'line',
         data: {
-          labels: allMonths,
+          labels: activeMonths,
           datasets: [
             { label: l23, data: data23, borderColor: '#10b981', backgroundColor: '#10b981', tension: 0.1 },
             { label: l24, data: data24, borderColor: '#3b82f6', backgroundColor: '#3b82f6', tension: 0.1 },
             { label: l25, data: data25, borderColor: '#f59e0b', backgroundColor: '#f59e0b', tension: 0.1 },
-            { label: l26, data: data26, borderColor: '#ef4444', backgroundColor: '#ef4444', tension: 0.1, spanGaps: false }
+            { label: l26, data: data26, borderColor: '#ef4444', backgroundColor: '#ef4444', tension: 0.1 }
           ]
         },
         options: {
@@ -568,7 +540,7 @@
           plugins: { 
             legend: { position: 'top' }, 
             title: { display: false },
-            datalabels: { display: false } // 徹底移除所有圖上的數值標籤
+            datalabels: { display: false }
           }
         }
       });

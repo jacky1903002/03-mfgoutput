@@ -88,7 +88,7 @@
 
   <script>
     // ==========================================
-    // 1. Firebase 設定與初始化
+    // 1. Firebase 設定與初始化 (含本地快取與重連保護)
     // ==========================================
     const firebaseConfig = {
       apiKey: "AIzaSyB7Oss_eMXO4i4PBs9ZziiREb4r9Ko6a74",
@@ -105,29 +105,39 @@
     const auth = firebase.auth();
     const db = firebase.database();
 
-    // 全域狀態
+    // 優先從瀏覽器本地快取讀取資料，防止 F5 重新整理瞬間空白
+    const localCachedState = localStorage.getItem('mfg_app_state_cache');
+    if (localCachedState) {
+      try {
+        window.appState = JSON.parse(localCachedState);
+      } catch (e) {
+        console.error("解析本地快取失敗", e);
+      }
+    } else {
+      window.appState = {
+        currentSheetId: 'sheet_1',
+        sheets: [
+          {
+            id: 'sheet_1',
+            name: '產值分析',
+            columns: [
+              { key: 'category', title: '類別' },
+              { key: 'month', title: '月份' },
+              { key: '2023', title: '2023' },
+              { key: '2024', title: '2024' },
+              { key: '2025', title: '2025' },
+              { key: '2026', title: '2026' }
+            ],
+            data: []
+          }
+        ]
+      };
+    }
+
     window.isAuthorizedEditor = false;
-    window.appState = {
-      currentSheetId: 'sheet_1',
-      sheets: [
-        {
-          id: 'sheet_1',
-          name: '產值分析',
-          columns: [
-            { key: 'category', title: '類別' },
-            { key: 'month', title: '月份' },
-            { key: '2023', title: '2023' },
-            { key: '2024', title: '2024' },
-            { key: '2025', title: '2025' },
-            { key: '2026', title: '2026' }
-          ],
-          data: []
-        }
-      ]
-    };
     window.chartInstances = {};
 
-    // 驗證狀態監聽（加入載入中狀態，防範 F5 重新整理時畫面空白）
+    // 驗證狀態監聽
     auth.onAuthStateChanged(user => {
       if (user) {
         window.isAuthorizedEditor = true;
@@ -159,16 +169,23 @@
 
     function autoSaveToFirebase() {
       if (!window.isAuthorizedEditor) return;
+      // 同時寫入本地快取與雲端 Firebase
+      localStorage.setItem('mfg_app_state_cache', JSON.stringify(window.appState));
       db.ref('mfg_app_state').set(window.appState);
     }
 
     function loadFromFirebase() {
-      db.ref('mfg_app_state').once('value').then(snapshot => {
+      // 改用 on('value') 即時監聽，重連或雲端變動時會自動更新
+      db.ref('mfg_app_state').on('value', snapshot => {
         const val = snapshot.val();
         if (val && val.sheets) {
           window.appState = val;
+          localStorage.setItem('mfg_app_state_cache', JSON.stringify(window.appState));
+          renderApp();
+        } else {
+          autoSaveToFirebase();
+          renderApp();
         }
-        renderApp();
       });
     }
 
@@ -374,7 +391,9 @@
         container.appendChild(wrapper);
       });
 
-      buildAllEightComparisonCharts(sheet);
+      if (sheet) {
+        buildAllEightComparisonCharts(sheet);
+      }
     }
 
     function parseNum(val) {

@@ -115,12 +115,11 @@
       ]
     };
 
-    // 優先從 LocalStorage 載入
     const localCachedState = localStorage.getItem('mfg_app_state_cache');
     window.appState = localCachedState ? JSON.parse(localCachedState) : defaultState;
     window.isAuthorizedEditor = false;
     window.chartInstances = {};
-    let isDataLoadedFromCloud = false; // 防護鎖：確保雲端非同步載入完成前不亂覆蓋
+    let isDataLoadedFromCloud = false;
 
     auth.onAuthStateChanged(user => {
       if (user) {
@@ -153,7 +152,6 @@
 
     function autoSaveToFirebase() {
       if (!window.isAuthorizedEditor) return;
-      // 必須等雲端初始同步完成後，或確定有資料才寫入，避免把空資料存上去
       if (!isDataLoadedFromCloud && window.appState.sheets[0].data.length === 0) return;
       
       localStorage.setItem('mfg_app_state_cache', JSON.stringify(window.appState));
@@ -164,17 +162,14 @@
       db.ref('mfg_app_state').once('value').then(snapshot => {
         const val = snapshot.val();
         if (val && val.sheets && val.sheets.length > 0 && val.sheets[0].data.length > 0) {
-          // 雲端有完整資料，優先採納雲端
           window.appState = val;
           localStorage.setItem('mfg_app_state_cache', JSON.stringify(window.appState));
         } else if (window.appState.sheets[0].data.length > 0) {
-          // 如果雲端空的但本地有資料，將本地資料推上雲端
           db.ref('mfg_app_state').set(window.appState);
         }
         isDataLoadedFromCloud = true;
         renderApp();
 
-        // 之後持續監聽即時變動
         db.ref('mfg_app_state').on('value', snap => {
           const liveVal = snap.val();
           if (liveVal && liveVal.sheets && liveVal.sheets.length > 0 && liveVal.sheets[0].data.length > 0) {
@@ -364,7 +359,7 @@
     };
 
     // ==========================================
-    // 3. 圖表引擎 (精確切斷 2026 超過月份的線條)
+    // 3. 圖表引擎 (依據 2026 有效資料動態調整 X 軸月份)
     // ==========================================
     function renderCharts() {
       const container = document.getElementById('charts-container');
@@ -372,7 +367,7 @@
       const sheet = window.appState.sheets.find(s => s.id === window.appState.currentSheetId);
       
       const chartIds = ['sc1', 'sc2', 'sc3', 'sc4', 'sc5', 'sc6', 'sc7', 'sc8'];
-      const chartTitles = ['產值同期比較(石墨)', '產值同期比較(鎢鉬鉭)', '產值同期比較(其他)', '產值同期比較(合計)', '石墨累積產值', '鎢鉬鉭累積產值', '其他累積產值', '合計累積產值'];
+      const chartTitles = ['產值同期比較(石墨)', '產值同期比較(鎢鉬鉭)', '產值同期比較(其他)', '產值同期比較(合計)', '石墨累積產值', '鎢鉬鉭累積產值', 'Other累積產值', '合計累積產值'];
 
       chartIds.forEach((id, idx) => {
         const wrapper = document.createElement('div');
@@ -425,22 +420,17 @@
         });
       };
 
-      let maxDataMonthIndex = 7; // 預設 8 月 (索引 7)
-      let sampleRows = sheet.data;
-      if (sampleRows.length > 0) {
-        let lastValidIdx = -1;
-        sampleRows.forEach((r, idx) => {
-          let val26 = parseNum(r[k26]);
-          if (val26 > 0) {
-            lastValidIdx = idx;
-          }
-        });
-        if (lastValidIdx !== -1) {
-          maxDataMonthIndex = lastValidIdx;
+      // 嚴格掃描：找出 2026 年真正有填寫數值的最後一個月份索引
+      let maxDataMonthIndex = 0;
+      sheet.data.forEach((r, idx) => {
+        let val26 = parseNum(r[k26]);
+        if (val26 > 0) {
+          maxDataMonthIndex = Math.max(maxDataMonthIndex, idx);
         }
-      }
+      });
 
-      const activeMonthsCount = Math.max(8, maxDataMonthIndex + 1);
+      // 如果全部都沒填，至少預設顯示到 Jan (索引 0)
+      const activeMonthsCount = maxDataMonthIndex + 1;
       const months = allMonths.slice(0, activeMonthsCount);
 
       const getCombinedRows = () => {
@@ -470,9 +460,9 @@
 
       materials.forEach((mat, idx) => {
         let rows = getMaterialRows(mat).slice(0, activeMonthsCount);
-        drawCumulativeLineChart(`sc${idx+5}`, rows, `${mat}累積產值`, k23, k24, k25, k26, maxDataMonthIndex);
+        drawCumulativeLineChart(`sc${idx+5}`, rows, `${mat}累積產值`, k23, k24, k25, k26);
       });
-      drawCumulativeLineChart('sc8', getCombinedRows(), '合計累積產值', k23, k24, k25, k26, maxDataMonthIndex);
+      drawCumulativeLineChart('sc8', getCombinedRows(), '合計累積產值', k23, k24, k25, k26);
     }
 
     function drawBarComparisonChart(chartId, rows, titleText, k23, k24, k25, k26) {
@@ -489,7 +479,7 @@
             { label: '2023', data: rows.map(r => parseNum(r[k23])), backgroundColor: '#10b981' },
             { label: '2024', data: rows.map(r => parseNum(r[k24])), backgroundColor: '#3b82f6' },
             { label: '2025', data: rows.map(r => parseNum(r[k25])), backgroundColor: '#f59e0b' },
-            { label: '2026', data: rows.map(r => (parseNum(r[k26]) > 0 ? parseNum(r[k26]) : null)), backgroundColor: '#ef4444' }
+            { label: '2026', data: rows.map(r => { let v = parseNum(r[k26]); return v > 0 ? v : null; }), backgroundColor: '#ef4444' }
           ]
         },
         options: {
@@ -500,7 +490,7 @@
       });
     }
 
-    function drawCumulativeLineChart(chartId, rows, titleText, k23, k24, k25, k26, maxDataMonthIndex) {
+    function drawCumulativeLineChart(chartId, rows, titleText, k23, k24, k25, k26) {
       const canvas = document.getElementById(`canvas-${chartId}`);
       if (!canvas) return;
       if (window.chartInstances[chartId]) window.chartInstances[chartId].destroy();
@@ -512,9 +502,10 @@
       const data24 = rows.map(r => { sum24 += parseNum(r[k24]); return sum24; });
       const data25 = rows.map(r => { sum25 += parseNum(r[k25]); return sum25; });
       
-      const data26 = rows.map((r, idx) => {
-        if (idx > maxDataMonthIndex) return null;
+      // 2026 累積：若當月數值為 0 或空，則直接給 null，讓折線乾淨終止
+      const data26 = rows.map(r => {
         let val = parseNum(r[k26]);
+        if (val <= 0) return null;
         sum26 += val;
         return sum26;
       });

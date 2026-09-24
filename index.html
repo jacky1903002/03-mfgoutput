@@ -303,14 +303,55 @@
       thead.appendChild(headerTr);
       table.appendChild(thead);
 
+      // 只有第二個工作表 (sheetIndex === 1，即「線上WIP」) 才計算並顯示熱力圖
+      let colExtremes = {};
+      if (sheetIndex === 1) {
+        sheet.columns.forEach((col, cIdx) => {
+          if (cIdx >= 1) {
+            let vals = sheet.data.map(row => parseNum(row[col.key])).filter(v => v !== 0);
+            if (vals.length > 0) {
+              colExtremes[col.key] = {
+                min: Math.min(...vals),
+                max: Math.max(...vals)
+              };
+            }
+          }
+        });
+      }
+
       const tbody = document.createElement('tbody');
       tbody.className = 'divide-y divide-slate-100 text-sm';
       sheet.data.forEach((row, rowIdx) => {
         let tr = document.createElement('tr');
-        sheet.columns.forEach((col) => {
+        sheet.columns.forEach((col, cIdx) => {
           let td = document.createElement('td');
           td.className = 'px-4 py-2.5 transition-colors duration-200';
           let val = row[col.key] !== undefined ? row[col.key] : '';
+
+          // 只有第二個工作表套用熱力圖色彩
+          if (sheetIndex === 1 && cIdx >= 1 && colExtremes[col.key]) {
+            let numVal = parseNum(val);
+            let { min, max } = colExtremes[col.key];
+            if (max !== min && numVal > 0) {
+              let ratio = (numVal - min) / (max - min);
+              let r, g, b;
+              if (ratio <= 0.5) {
+                let subRatio = ratio * 2;
+                r = Math.round(134 + (254 - 134) * subRatio);
+                g = Math.round(239 + (240 - 239) * subRatio);
+                b = Math.round(172 + (138 - 172) * subRatio);
+              } else {
+                let subRatio = (ratio - 0.5) * 2;
+                r = Math.round(254 + (239 - 254) * subRatio);
+                g = Math.round(240 + (68 - 240) * subRatio);
+                b = Math.round(138 + (68 - 138) * subRatio);
+              }
+              td.style.backgroundColor = `rgb(${r}, ${g}, ${b})`;
+            } else if (numVal > 0 && max === min) {
+              td.style.backgroundColor = 'rgb(187, 247, 208)';
+            }
+          }
+
           td.innerHTML = `<input type="text" value="${val}" onchange="window.updateCell(${rowIdx}, '${col.key}', this.value)" class="w-full bg-transparent border-b border-transparent focus:border-blue-500 focus:bg-white focus:outline-none px-1 py-0.5">`;
           tr.appendChild(td);
         });
@@ -385,7 +426,6 @@
       const container = document.getElementById('charts-container');
       container.innerHTML = '';
       const sheetIndex = window.appState.sheets.findIndex(s => s.id === window.appState.currentSheetId);
-      
       const sheet = window.appState.sheets[sheetIndex];
 
       if (sheetIndex === 0) {

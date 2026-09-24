@@ -119,11 +119,11 @@
           name: '線上WIP',
           columns: [
             { key: 'category', title: '類別' },
-            { key: 'May-26', title: 'May-26' },
-            { key: 'Jun-26', title: 'Jun-26' },
-            { key: 'Jul-26', title: 'Jul-26' },
-            { key: 'Aug-26', title: 'Aug-26' },
-            { key: 'Sep-26', title: 'Sep-26' }
+            { key: 'May-26', title: 'MAY-26' },
+            { key: 'Jun-26', title: 'JUN-26' },
+            { key: 'Jul-26', title: 'JUL-26' },
+            { key: 'Aug-26', title: 'AUG-26' },
+            { key: 'Sep-26', title: 'SEP-26' }
           ],
           data: [
             { category: '線切割', 'May-26': 10404, 'Jun-26': 7996, 'Jul-26': 7865, 'Aug-26': 10368, 'Sep-26': 8219 },
@@ -278,8 +278,8 @@
         name: '新工作表 ' + (window.appState.sheets.length + 1),
         columns: [
           { key: 'category', title: '類別' },
-          { key: 'm1', title: 'May-26' },
-          { key: 'm2', title: 'Jun-26' }
+          { key: 'm1', title: 'MAY-26' },
+          { key: 'm2', title: 'JUN-26' }
         ],
         data: []
       });
@@ -357,7 +357,7 @@
     window.addColumn = function() {
       if (!window.isAuthorizedEditor) { alert("需要管理者權限！"); return; }
       const sheet = window.appState.sheets.find(s => s.id === window.appState.currentSheetId);
-      const colTitle = prompt("請輸入新欄位名稱 (例如 Jul-26)：");
+      const colTitle = prompt("請輸入新欄位名稱 (例如 JUL-26)：");
       if (!colTitle) return;
       const colKey = 'col_' + Date.now();
       sheet.columns.push({ key: colKey, title: colTitle });
@@ -425,15 +425,15 @@
         if (sheet) buildAllEightComparisonCharts(sheet);
 
       } else if (sheetIndex === 1) {
-        // 第二個工作表：線上WIP 熱力圖（超明顯對比：大紅、小綠）
+        // 第二個工作表：線上WIP 極致熱力圖（超強烈對比：深紅 vs 深綠）
         const wrapper = document.createElement('div');
         wrapper.className = 'bg-white p-6 rounded-xl shadow-sm border flex flex-col md:col-span-2';
         wrapper.id = `export-area-sheet2-heatmap`;
         wrapper.innerHTML = `
           <div class="flex justify-between items-center mb-4">
             <div>
-              <h3 class="font-bold text-slate-800 text-lg">線上WIP - 熱力圖分析</h3>
-              <p class="text-xs text-slate-500 mt-0.5">數值越大越紅、越小越淺綠，超明顯對比呈現</p>
+              <h3 class="font-bold text-slate-800 text-lg">線上WIP - 極致對比熱力圖</h3>
+              <p class="text-xs text-slate-500 mt-0.5">數值越大呈現極濃烈紅、越小呈現極濃烈綠，對比清晰</p>
             </div>
             <button onclick="window.exportChartToPNG('sheet2-heatmap', 'WIP熱力圖')" class="export-btn text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 px-3 py-1.5 rounded transition">匯出圖片</button>
           </div>
@@ -441,7 +441,7 @@
         `;
         container.appendChild(wrapper);
 
-        buildWipHeatmapDirect(sheet);
+        buildWipHeatmapExtreme(sheet);
 
       } else if (sheetIndex === 2) {
         const wrapper = document.createElement('div');
@@ -469,18 +469,17 @@
       return isNaN(n) ? 0 : n;
     }
 
-    // 建立線上WIP直接熱力圖（超明顯對比：大紅、小綠）
-    function buildWipHeatmapDirect(sheet) {
+    // 建立極致對比熱力圖（超強烈深紅、深綠對比）
+    function buildWipHeatmapExtreme(sheet) {
       const container = document.getElementById('heatmap-container');
       if (!container) return;
 
-      let cols = sheet.columns.slice(1); // 略過第一欄類別
+      let cols = sheet.columns.slice(1);
       if (cols.length === 0) {
         container.innerHTML = `<p class="text-sm text-slate-400 py-6 text-center">無可用欄位。</p>`;
         return;
       }
 
-      // 收集所有數值以計算全域最大與最小值
       let allValues = [];
       sheet.data.forEach(row => {
         cols.forEach(col => {
@@ -508,21 +507,34 @@
         
         cols.forEach(col => {
           let val = parseNum(row[col.key]);
-          let bgStyle = 'background-color: transparent;';
+          let bgStyle = 'background-color: transparent; color: #1e293b;';
           
           if (val > 0 && maxVal !== minVal) {
             let ratio = (val - minVal) / (maxVal - minVal);
-            // 色彩漸層：從淺綠 (數值小) 到 大紅 (數值大)
-            // 淺綠: rgb(187, 247, 208), 大紅: rgb(252, 165, 165)
-            let r = Math.round(187 + (252 - 187) * ratio);
-            let g = Math.round(247 + (165 - 247) * ratio);
-            let b = Math.round(208 + (165 - 208) * ratio);
-            bgStyle = `background-color: rgb(${r}, ${g}, ${b});`;
+            let r, g, b;
+            
+            if (ratio > 0.5) {
+              // 偏高區段：從淺粉紅過渡到極濃深紅 (rgb(239, 68, 68))
+              let subRatio = (ratio - 0.5) * 2;
+              r = Math.round(254 + (239 - 254) * subRatio);
+              g = Math.round(226 + (68 - 226) * subRatio);
+              b = Math.round(226 + (68 - 226) * subRatio);
+            } else {
+              // 偏低區段：從極濃深綠 (rgb(16, 185, 129)) 過渡到淺綠
+              let subRatio = ratio * 2;
+              r = Math.round(16 + (209 - 16) * subRatio);
+              g = Math.round(185 + (250 - 185) * subRatio);
+              b = Math.round(129 + (229 - 129) * subRatio);
+            }
+            
+            // 超過 75% 或低於 25% 時使用白色文字以確保極佳可讀性
+            let textColor = (ratio > 0.75 || ratio < 0.25) ? '#ffffff' : '#1e293b';
+            bgStyle = `background-color: rgb(${r}, ${g}, ${b}); color: ${textColor}; font-weight: bold;`;
           } else if (val > 0) {
-            bgStyle = `background-color: rgb(252, 165, 165);`;
+            bgStyle = `background-color: rgb(239, 68, 68); color: #ffffff; font-weight: bold;`;
           }
 
-          html += `<td class="px-4 py-3 text-center font-semibold" style="${bgStyle}">${val > 0 ? val.toLocaleString() : '-'}</td>`;
+          html += `<td class="px-4 py-3 text-center" style="${bgStyle}">${val > 0 ? val.toLocaleString() : '-'}</td>`;
         });
         html += `</tr>`;
       });

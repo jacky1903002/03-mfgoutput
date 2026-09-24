@@ -361,7 +361,7 @@
     };
 
     // ==========================================
-    // 3. 圖表引擎 (歷史資料顯示全 12 個月，2026/排名對齊至有效月)
+    // 3. 圖表引擎 (精確對齊至 2026 有效月進行排名與比較)
     // ==========================================
     function renderCharts() {
       const container = document.getElementById('charts-container');
@@ -426,7 +426,7 @@
         });
       };
 
-      // 1. 找出 2026 年實際有資料的最後一個月份索引 (例如 8 月 = 7)
+      // 1. 嚴格找出 2026 年有填寫資料的最後月份索引 (例如 8 月 = 7)
       let maxDataMonthIndex = 0;
       sheet.data.forEach((r, idx) => {
         let val26 = parseNum(r[k26]);
@@ -434,23 +434,19 @@
           maxDataMonthIndex = Math.max(maxDataMonthIndex, idx);
         }
       });
-      const activeMonthsCount = maxDataMonthIndex + 1;
-
-      // 2. 前四張 (同期比較 Bar Chart)：X軸完整顯示 12 個月，但 2026 年超過有效月份的部分補 null
-      const fullMonthsRows = sheet.data.length > 0 ? sheet.data : allMonths.map(m => ({ month: m }));
+      const activeLimit = maxDataMonthIndex + 1;
 
       materials.forEach((mat, idx) => {
         let rows = getMaterialRows(mat);
-        drawBarComparisonChart(`sc${idx+1}`, rows, `${mat}產值同期比較`, k23, k24, k25, k26, activeMonthsCount);
+        drawBarComparisonChart(`sc${idx+1}`, rows, `${mat}產值同期比較`, k23, k24, k25, k26, activeLimit);
       });
-      drawBarComparisonChart('sc4', getCombinedRowsForAllMonths(materials, sheet, k23, k24, k25, k26), '合計產值同期比較', k23, k24, k25, k26, activeMonthsCount);
+      drawBarComparisonChart('sc4', getCombinedRowsForAllMonths(materials, sheet, k23, k24, k25, k26), '合計產值同期比較', k23, k24, k25, k26, activeLimit);
 
-      // 3. 後四張 (累積產值 Line Chart)：計算排名與 YoY（排名僅累計到 activeMonthsCount）
       materials.forEach((mat, idx) => {
         let rows = getMaterialRows(mat);
-        drawCumulativeLineChart(`sc${idx+5}`, rows, `${mat}累積產值`, k23, k24, k25, k26, activeMonthsCount);
+        drawCumulativeLineChart(`sc${idx+5}`, rows, `${mat}累積產值`, k23, k24, k25, k26, activeLimit);
       });
-      drawCumulativeLineChart('sc8', getCombinedRowsForAllMonths(materials, sheet, k23, k24, k25, k26), '合計累積產值', k23, k24, k25, k26, activeMonthsCount);
+      drawCumulativeLineChart('sc8', getCombinedRowsForAllMonths(materials, sheet, k23, k24, k25, k26), '合計累積產值', k23, k24, k25, k26, activeLimit);
     }
 
     function getCombinedRowsForAllMonths(materials, sheet, k23, k24, k25, k26) {
@@ -485,12 +481,11 @@
       if (window.chartInstances[chartId]) window.chartInstances[chartId].destroy();
 
       const allMonths = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-      const labels = allMonths;
-
+      
       window.chartInstances[chartId] = new Chart(canvas, {
         type: 'bar',
         data: {
-          labels: labels,
+          labels: allMonths,
           datasets: [
             { label: '2023', data: allMonths.map((_, i) => parseNum(rows[i]?.[k23])), backgroundColor: '#10b981' },
             { label: '2024', data: allMonths.map((_, i) => parseNum(rows[i]?.[k24])), backgroundColor: '#3b82f6' },
@@ -520,22 +515,22 @@
       if (window.chartInstances[chartId]) window.chartInstances[chartId].destroy();
 
       const allMonths = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-      const labels = allMonths;
       
-      let sum23 = 0, sum24 = 0, sum25 = 0, sum26 = 0;
-      const data23 = allMonths.map((_, i) => { sum23 += parseNum(rows[i]?.[k23]); return sum23; });
-      const data24 = allMonths.map((_, i) => { sum24 += parseNum(rows[i]?.[k24]); return sum24; });
-      const data25 = allMonths.map((_, i) => { sum25 += parseNum(rows[i]?.[k25]); return sum25; });
+      // 1. 各年度完整 12 個月的累積數據線條
+      let s23 = 0, s24 = 0, s25 = 0, s26 = 0;
+      const data23 = allMonths.map((_, i) => { s23 += parseNum(rows[i]?.[k23]); return s23; });
+      const data24 = allMonths.map((_, i) => { s24 += parseNum(rows[i]?.[k24]); return s24; });
+      const data25 = allMonths.map((_, i) => { s25 += parseNum(rows[i]?.[k25]); return s25; });
       
       const data26 = allMonths.map((_, i) => {
         if (i >= activeLimit) return null;
         let val = parseNum(rows[i]?.[k26]);
         if (val <= 0) return null;
-        sum26 += val;
-        return sum26;
+        s26 += val;
+        return s26;
       });
 
-      // 1. 排名計算：嚴格只累計統計到最後一年有資料的那個月份 (activeLimit)
+      // 2. Top1 排名計算：嚴格只累計到 2026 有資料的最後一個月份 (activeLimit)
       let rankSum23 = 0, rankSum24 = 0, rankSum25 = 0, rankSum26 = 0;
       for (let i = 0; i < activeLimit; i++) {
         rankSum23 += parseNum(rows[i]?.[k23]);
@@ -552,12 +547,10 @@
       ];
       totals.sort((a, b) => b.val - a.val);
 
-      // 2. YoY 計算：只顯示最後一年與前一年的比較 (2026 與 2025 在有效月份內的對比)
-      const prev25AtLimit = rankSum25;
-      const final26 = rankSum26;
-      const yoy26 = prev25AtLimit > 0 ? ((final26 - prev25AtLimit) / prev25AtLimit * 100).toFixed(1) : 0;
+      // 3. YoY 計算：只顯示 2026 與 2025 在相同對應月份（activeLimit）下的比較
+      const yoy26 = rankSum25 > 0 ? ((rankSum26 - rankSum25) / rankSum25 * 100).toFixed(1) : 0;
 
-      // 更新上方標題列顯示排名與單一 YoY (26 YoY)
+      // 更新標題列
       const titleEl = document.getElementById(`title-${chartId}`);
       if (titleEl) {
         titleEl.innerHTML = `${titleText} &nbsp;|&nbsp; <span class="text-xs text-blue-600 font-bold">Top1:${totals[0].year}</span> <span class="text-xs text-slate-500">(26 YoY: ${yoy26}%)</span>`;
@@ -566,7 +559,7 @@
       window.chartInstances[chartId] = new Chart(canvas, {
         type: 'line',
         data: {
-          labels: labels,
+          labels: allMonths,
           datasets: [
             { label: '2023', data: data23, borderColor: '#10b981', backgroundColor: '#10b981', tension: 0.1 },
             { label: '2024', data: data24, borderColor: '#3b82f6', backgroundColor: '#3b82f6', tension: 0.1 },
@@ -583,11 +576,10 @@
             datalabels: {
               align: 'top',
               formatter: (value, context) => {
-                // 在該 dataset 最後一個有效數值點標註數字
-                if (value !== null && context.dataIndex === activeLimit - 1 && context.dataset.label === '2026') {
-                  return (value / 1000000).toFixed(1) + 'M';
-                }
-                if (value !== null && context.dataIndex === 11 && context.dataset.label !== '2026') {
+                // 修正：歷史年份只在對應的同期月份（activeLimit - 1）或 12 月顯示標籤；
+                // 為了避免 12 月出現奇怪的標籤，歷史年份的標籤改為對齊顯示在 2026 終止的那個月份（activeLimit - 1），
+                // 這樣可以跟 2026 做公平的同期數值比對。
+                if (value !== null && context.dataIndex === activeLimit - 1) {
                   return (value / 1000000).toFixed(1) + 'M';
                 }
                 return '';

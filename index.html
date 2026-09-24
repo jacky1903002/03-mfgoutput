@@ -525,35 +525,36 @@
               label: l23, 
               data: activeMonths.map((_, i) => parseNum(rows[i]?.[k23])), 
               backgroundColor: '#10b981',
-              datalabels: { display: false } // 完全關閉數字
+              datalabels: { display: false }
             },
             { 
               label: l24, 
               data: activeMonths.map((_, i) => parseNum(rows[i]?.[k24])), 
               backgroundColor: '#3b82f6',
-              datalabels: { display: false } // 完全關閉數字
+              datalabels: { display: false }
             },
             { 
               label: l25, 
               data: activeMonths.map((_, i) => parseNum(rows[i]?.[k25])), 
               backgroundColor: '#f59e0b',
-              datalabels: { display: false } // 完全關閉數字
+              datalabels: { display: false }
             },
             { 
               label: l26, 
               data: activeMonths.map((_, i) => parseNum(rows[i]?.[k26])), 
               backgroundColor: '#ef4444',
               datalabels: {
-                display: true, // 只有最新年份開啟
+                display: function(context) {
+                  return context.dataIndex === activeMonths.length - 1;
+                },
                 align: 'end',
                 anchor: 'end',
-                formatter: function(value, context) {
-                  return context.dataIndex === activeMonths.length - 1 ? '📍 we are here' : '';
+                formatter: function() {
+                  return '📍';
                 },
                 color: '#ef4444',
                 font: {
-                  weight: 'bold',
-                  size: 11
+                  size: 14
                 }
               }
             }
@@ -621,16 +622,17 @@
               backgroundColor: '#ef4444', 
               tension: 0.1,
               datalabels: {
-                display: true,
+                display: function(context) {
+                  return context.dataIndex === activeMonths.length - 1;
+                },
                 align: 'top',
                 anchor: 'end',
-                formatter: function(value, context) {
-                  return context.dataIndex === activeMonths.length - 1 ? '📍 we are here' : '';
+                formatter: function() {
+                  return '📍';
                 },
                 color: '#ef4444',
                 font: {
-                  weight: 'bold',
-                  size: 11
+                  size: 14
                 }
               }
             }

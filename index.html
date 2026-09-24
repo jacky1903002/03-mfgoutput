@@ -79,7 +79,7 @@
 
   <script>
     // ==========================================
-    // 1. Firebase 初始化與強效本地防護
+    // 1. Firebase 初始化與資料防護鎖
     // ==========================================
     const firebaseConfig = {
       apiKey: "AIzaSyB7Oss_eMXO4i4PBs9ZziiREb4r9Ko6a74",
@@ -96,7 +96,6 @@
     const auth = firebase.auth();
     const db = firebase.database();
 
-    // 預設初始狀態
     const defaultState = {
       currentSheetId: 'sheet_1',
       sheets: [
@@ -116,11 +115,12 @@
       ]
     };
 
-    // 優先讀取 LocalStorage 快取，確保 F5 絕對不消失
+    // 優先從 LocalStorage 載入
     const localCachedState = localStorage.getItem('mfg_app_state_cache');
     window.appState = localCachedState ? JSON.parse(localCachedState) : defaultState;
     window.isAuthorizedEditor = false;
     window.chartInstances = {};
+    let isDataLoadedFromCloud = false; // 防護鎖：確保雲端非同步載入完成前不亂覆蓋
 
     auth.onAuthStateChanged(user => {
       if (user) {
@@ -153,21 +153,39 @@
 
     function autoSaveToFirebase() {
       if (!window.isAuthorizedEditor) return;
+      // 必須等雲端初始同步完成後，或確定有資料才寫入，避免把空資料存上去
+      if (!isDataLoadedFromCloud && window.appState.sheets[0].data.length === 0) return;
+      
       localStorage.setItem('mfg_app_state_cache', JSON.stringify(window.appState));
       db.ref('mfg_app_state').set(window.appState);
     }
 
     function loadFromFirebase() {
-      db.ref('mfg_app_state').on('value', snapshot => {
+      db.ref('mfg_app_state').once('value').then(snapshot => {
         const val = snapshot.val();
-        if (val && val.sheets && val.sheets.length > 0) {
-          // 只有當雲端有實質資料時才覆蓋，避免重連時抓到空資料
+        if (val && val.sheets && val.sheets.length > 0 && val.sheets[0].data.length > 0) {
+          // 雲端有完整資料，優先採納雲端
           window.appState = val;
           localStorage.setItem('mfg_app_state_cache', JSON.stringify(window.appState));
-        } else {
-          // 如果雲端是空的，就把本地現有的上傳上去保護資料
-          autoSaveToFirebase();
+        } else if (window.appState.sheets[0].data.length > 0) {
+          // 如果雲端空的但本地有資料，將本地資料推上雲端
+          db.ref('mfg_app_state').set(window.appState);
         }
+        isDataLoadedFromCloud = true;
+        renderApp();
+
+        // 之後持續監聽即時變動
+        db.ref('mfg_app_state').on('value', snap => {
+          const liveVal = snap.val();
+          if (liveVal && liveVal.sheets && liveVal.sheets.length > 0 && liveVal.sheets[0].data.length > 0) {
+            window.appState = liveVal;
+            localStorage.setItem('mfg_app_state_cache', JSON.stringify(window.appState));
+            renderApp();
+          }
+        });
+      }).catch(err => {
+        console.error("載入 Firebase 失敗:", err);
+        isDataLoadedFromCloud = true;
         renderApp();
       });
     }
@@ -346,7 +364,7 @@
     };
 
     // ==========================================
-    // 3. 圖表引擎 (完美限制 2026 僅到有資料的月份)
+    // 3. 圖表引擎 (精確切斷 2026 超過月份的線條)
     // ==========================================
     function renderCharts() {
       const container = document.getElementById('charts-container');
@@ -407,7 +425,6 @@
         });
       };
 
-      // 精準計算 2026 實際有資料的最後一個月份索引
       let maxDataMonthIndex = 7; // 預設 8 月 (索引 7)
       let sampleRows = sheet.data;
       if (sampleRows.length > 0) {
@@ -495,7 +512,6 @@
       const data24 = rows.map(r => { sum24 += parseNum(r[k24]); return sum24; });
       const data25 = rows.map(r => { sum25 += parseNum(r[k25]); return sum25; });
       
-      // 關鍵修正：2026 年累積產值超過有資料的月份後強制回傳 null，線條即會自動中斷
       const data26 = rows.map((r, idx) => {
         if (idx > maxDataMonthIndex) return null;
         let val = parseNum(r[k26]);
@@ -545,7 +561,7 @@
         const data = new Uint8Array(e.target.result);
         const workbook = XLSX.read(data, { type: 'array' });
         const sheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+        const worksheet = workbook.Sheets[sheetName];
         const json = XLSX.utils.sheet_to_json(worksheet);
         
         if (json.length > 0) {

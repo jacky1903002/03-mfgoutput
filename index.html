@@ -113,6 +113,26 @@
             { key: '2026', title: '2026' }
           ],
           data: []
+        },
+        {
+          id: 'sheet_2',
+          name: '線上WIP',
+          columns: [
+            { key: 'category', title: '類別' },
+            { key: 'month', title: '月份' },
+            { key: 'val', title: '數值' }
+          ],
+          data: []
+        },
+        {
+          id: 'sheet_3',
+          name: '石墨複合材占比',
+          columns: [
+            { key: 'category', title: '類別' },
+            { key: 'month', title: '時間/月份' },
+            { key: 'val', title: '數值' }
+          ],
+          data: []
         }
       ]
     };
@@ -245,10 +265,7 @@
         columns: [
           { key: 'category', title: '類別' },
           { key: 'month', title: '月份' },
-          { key: '2023', title: '2023' },
-          { key: '2024', title: '2024' },
-          { key: '2025', title: '2025' },
-          { key: '2026', title: '2026' }
+          { key: 'val', title: '數值' }
         ],
         data: []
       });
@@ -286,53 +303,14 @@
       thead.appendChild(headerTr);
       table.appendChild(thead);
 
-      let colExtremes = {};
-      if (sheetIndex > 0) {
-        sheet.columns.forEach((col, cIdx) => {
-          if (cIdx >= 1) {
-            let vals = sheet.data.map(row => parseNum(row[col.key])).filter(v => v !== 0);
-            if (vals.length > 0) {
-              colExtremes[col.key] = {
-                min: Math.min(...vals),
-                max: Math.max(...vals)
-              };
-            }
-          }
-        });
-      }
-
       const tbody = document.createElement('tbody');
       tbody.className = 'divide-y divide-slate-100 text-sm';
       sheet.data.forEach((row, rowIdx) => {
         let tr = document.createElement('tr');
-        sheet.columns.forEach((col, cIdx) => {
+        sheet.columns.forEach((col) => {
           let td = document.createElement('td');
           td.className = 'px-4 py-2.5 transition-colors duration-200';
           let val = row[col.key] !== undefined ? row[col.key] : '';
-
-          if (sheetIndex > 0 && cIdx >= 1 && colExtremes[col.key]) {
-            let numVal = parseNum(val);
-            let { min, max } = colExtremes[col.key];
-            if (max !== min && numVal > 0) {
-              let ratio = (numVal - min) / (max - min);
-              let r, g, b;
-              if (ratio <= 0.5) {
-                let subRatio = ratio * 2;
-                r = Math.round(134 + (254 - 134) * subRatio);
-                g = Math.round(239 + (240 - 239) * subRatio);
-                b = Math.round(172 + (138 - 172) * subRatio);
-              } else {
-                let subRatio = (ratio - 0.5) * 2;
-                r = Math.round(254 + (239 - 254) * subRatio);
-                g = Math.round(240 + (68 - 240) * subRatio);
-                b = Math.round(138 + (68 - 138) * subRatio);
-              }
-              td.style.backgroundColor = `rgb(${r}, ${g}, ${b})`;
-            } else if (numVal > 0 && max === min) {
-              td.style.backgroundColor = 'rgb(187, 247, 208)';
-            }
-          }
-
           td.innerHTML = `<input type="text" value="${val}" onchange="window.updateCell(${rowIdx}, '${col.key}', this.value)" class="w-full bg-transparent border-b border-transparent focus:border-blue-500 focus:bg-white focus:outline-none px-1 py-0.5">`;
           tr.appendChild(td);
         });
@@ -345,7 +323,7 @@
       if (!window.isAuthorizedEditor) { alert("需要管理者權限！"); return; }
       const sheet = window.appState.sheets.find(s => s.id === window.appState.currentSheetId);
       let newRow = {};
-      sheet.columns.forEach((c, idx) => newRow[c.key] = idx === 0 ? '石墨' : (idx === 1 ? 'Jan' : 0));
+      sheet.columns.forEach((c, idx) => newRow[c.key] = idx === 0 ? '類別A' : (idx === 1 ? 'Jan' : 0));
       sheet.data.push(newRow);
       renderApp();
       autoSaveToFirebase();
@@ -364,7 +342,7 @@
     window.addColumn = function() {
       if (!window.isAuthorizedEditor) { alert("需要管理者權限！"); return; }
       const sheet = window.appState.sheets.find(s => s.id === window.appState.currentSheetId);
-      const colTitle = prompt("請輸入新欄位標題 (例: 2027)：");
+      const colTitle = prompt("請輸入新欄位標題：");
       if (!colTitle) return;
       const colKey = 'col_' + Date.now();
       sheet.columns.push({ key: colKey, title: colTitle });
@@ -401,37 +379,55 @@
     };
 
     // ==========================================
-    // 3. 圖表引擎 (僅第一個工作表顯示圖表)
+    // 3. 圖表引擎
     // ==========================================
     function renderCharts() {
       const container = document.getElementById('charts-container');
       container.innerHTML = '';
       const sheetIndex = window.appState.sheets.findIndex(s => s.id === window.appState.currentSheetId);
       
-      if (sheetIndex > 0) return;
-
       const sheet = window.appState.sheets[sheetIndex];
-      const chartIds = ['sc1', 'sc2', 'sc3', 'sc4', 'sc5', 'sc6', 'sc7', 'sc8'];
-      const chartTitles = ['產值同期比較(石墨)', '產值同期比較(鎢鉬鉭)', '產值同期比較(other)', '產值同期比較(合計)', '石墨累積產值', '鎢鉬鉭累積產值', 'other累積產值', '合計累積產值'];
 
-      chartIds.forEach((id, idx) => {
+      if (sheetIndex === 0) {
+        // 第一個工作表：顯示 8 張產值分析圖表
+        const chartIds = ['sc1', 'sc2', 'sc3', 'sc4', 'sc5', 'sc6', 'sc7', 'sc8'];
+        const chartTitles = ['產值同期比較(石墨)', '產值同期比較(鎢鉬鉭)', '產值同期比較(other)', '產值同期比較(合計)', '石墨累積產值', '鎢鉬鉭累積產值', 'other累積產值', '合計累積產值'];
+
+        chartIds.forEach((id, idx) => {
+          const wrapper = document.createElement('div');
+          wrapper.className = 'bg-white p-5 rounded-xl shadow-sm border flex flex-col';
+          wrapper.id = `export-area-${id}`;
+          wrapper.innerHTML = `
+            <div class="flex justify-between items-center mb-4">
+              <h3 id="title-${id}" class="font-semibold text-slate-700 text-sm">${chartTitles[idx]}</h3>
+              <button onclick="window.exportChartToPNG('${id}', '${chartTitles[idx]}')" class="text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 px-2.5 py-1 rounded transition">匯出圖片</button>
+            </div>
+            <div class="relative h-72 w-full">
+              <canvas id="canvas-${id}"></canvas>
+            </div>
+          `;
+          container.appendChild(wrapper);
+        });
+
+        if (sheet) buildAllEightComparisonCharts(sheet);
+
+      } else if (sheetIndex === 2) {
+        // 第三個工作表：時間對三類別的折線圖
         const wrapper = document.createElement('div');
-        wrapper.className = 'bg-white p-5 rounded-xl shadow-sm border flex flex-col';
-        wrapper.id = `export-area-${id}`;
+        wrapper.className = 'bg-white p-5 rounded-xl shadow-sm border flex flex-col md:col-span-2';
+        wrapper.id = `export-area-sheet3`;
         wrapper.innerHTML = `
           <div class="flex justify-between items-center mb-4">
-            <h3 id="title-${id}" class="font-semibold text-slate-700 text-sm">${chartTitles[idx]}</h3>
-            <button onclick="window.exportChartToPNG('${id}', '${chartTitles[idx]}')" class="text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 px-2.5 py-1 rounded transition">匯出圖片</button>
+            <h3 class="font-semibold text-slate-700 text-base">${sheet.name} - 時間對三類別趨勢圖</h3>
+            <button onclick="window.exportChartToPNG('sheet3', '${sheet.name}')" class="text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 px-2.5 py-1 rounded transition">匯出圖片</button>
           </div>
-          <div class="relative h-72 w-full">
-            <canvas id="canvas-${id}"></canvas>
+          <div class="relative h-96 w-full">
+            <canvas id="canvas-sheet3"></canvas>
           </div>
         `;
         container.appendChild(wrapper);
-      });
 
-      if (sheet) {
-        buildAllEightComparisonCharts(sheet);
+        buildThreeCategoryLineChart(sheet);
       }
     }
 
@@ -440,6 +436,60 @@
       let s = String(val).replace(/[^0-9.-]/g, '');
       let n = parseFloat(s);
       return isNaN(n) ? 0 : n;
+    }
+
+    function buildThreeCategoryLineChart(sheet) {
+      const canvas = document.getElementById('canvas-sheet3');
+      if (!canvas) return;
+      if (window.chartInstances['sheet3']) window.chartInstances['sheet3'].destroy();
+
+      // 收集所有不重複的時間/月份 (X軸)
+      let timeLabels = [...new Set(sheet.data.map(r => String(r.month || r[sheet.columns[1]?.key] || '').trim()))].filter(Boolean);
+      if (timeLabels.length === 0) timeLabels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug'];
+
+      // 收集所有不重複的類別 (最多取前三個作為三條線)
+      let categories = [...new Set(sheet.data.map(r => String(r.category || r[sheet.columns[0]?.key] || '').trim()))].filter(Boolean);
+      if (categories.length === 0) categories = ['類別A', '類別B', '類別C'];
+
+      const colors = ['#10b981', '#3b82f6', '#ef4444', '#f59e0b', '#8b5cf6'];
+
+      const datasets = categories.slice(0, 3).map((cat, idx) => {
+        const dataVals = timeLabels.map(t => {
+          const match = sheet.data.find(r => {
+            let cVal = String(r.category || r[sheet.columns[0]?.key] || '').trim();
+            let mVal = String(r.month || r[sheet.columns[1]?.key] || '').trim();
+            return cVal === cat && mVal === t;
+          });
+          const valKey = sheet.columns[2] ? sheet.columns[2].key : 'val';
+          return match ? parseNum(match[valKey]) : 0;
+        });
+
+        return {
+          label: cat,
+          data: dataVals,
+          borderColor: colors[idx % colors.length],
+          backgroundColor: colors[idx % colors.length],
+          tension: 0.1,
+          datalabels: { display: false }
+        };
+      });
+
+      window.chartInstances['sheet3'] = new Chart(canvas, {
+        type: 'line',
+        data: {
+          labels: timeLabels,
+          datasets: datasets
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { position: 'top' },
+            title: { display: false }
+          }
+        },
+        plugins: [ChartDataLabels]
+      });
     }
 
     function buildAllEightComparisonCharts(sheet) {
@@ -553,9 +603,7 @@
                   return '📍';
                 },
                 color: '#ef4444',
-                font: {
-                  size: 14
-                }
+                font: { size: 14 }
               }
             }
           ]
@@ -603,37 +651,16 @@
         data: {
           labels: activeMonths,
           datasets: [
+            { label: l23, data: data23, borderColor: '#10b981', backgroundColor: '#10b981', tension: 0.1, datalabels: { display: false } },
+            { label: l24, data: data24, borderColor: '#3b82f6', backgroundColor: '#3b82f6', tension: 0.1, datalabels: { display: false } },
+            { label: l25, data: data25, borderColor: '#f59e0b', backgroundColor: '#f59e0b', tension: 0.1, datalabels: { display: false } },
             { 
-              label: l23, data: data23, borderColor: '#10b981', backgroundColor: '#10b981', tension: 0.1,
-              datalabels: { display: false }
-            },
-            { 
-              label: l24, data: data24, borderColor: '#3b82f6', backgroundColor: '#3b82f6', tension: 0.1,
-              datalabels: { display: false }
-            },
-            { 
-              label: l25, data: data25, borderColor: '#f59e0b', backgroundColor: '#f59e0b', tension: 0.1,
-              datalabels: { display: false }
-            },
-            { 
-              label: l26, 
-              data: data26, 
-              borderColor: '#ef4444', 
-              backgroundColor: '#ef4444', 
-              tension: 0.1,
+              label: l26, data: data26, borderColor: '#ef4444', backgroundColor: '#ef4444', tension: 0.1,
               datalabels: {
-                display: function(context) {
-                  return context.dataIndex === activeMonths.length - 1;
-                },
-                align: 'top',
-                anchor: 'end',
-                formatter: function() {
-                  return '📍';
-                },
-                color: '#ef4444',
-                font: {
-                  size: 14
-                }
+                display: function(context) { return context.dataIndex === activeMonths.length - 1; },
+                align: 'top', anchor: 'end',
+                formatter: function() { return '📍'; },
+                color: '#ef4444', font: { size: 14 }
               }
             }
           ]
@@ -641,10 +668,7 @@
         options: {
           responsive: true,
           maintainAspectRatio: false,
-          plugins: { 
-            legend: { position: 'top' }, 
-            title: { display: false }
-          }
+          plugins: { legend: { position: 'top' }, title: { display: false } }
         },
         plugins: [ChartDataLabels]
       });
@@ -678,7 +702,7 @@
         
         if (json.length > 0) {
           const keys = Object.keys(json[0]);
-          const columns = keys.map((k, i) => ({ key: i === 0 ? 'category' : (i === 1 ? 'month' : k), title: k }));
+          const columns = keys.map((k, i) => ({ key: i === 0 ? 'category' : (i === 1 ? 'month' : 'val'), title: k }));
           const sheetData = json.map(row => {
             let rObj = {};
             keys.forEach((k, i) => { rObj[columns[i].key] = row[k]; });

@@ -361,7 +361,7 @@
     };
 
     // ==========================================
-    // 3. 圖表引擎 (最後一根柱狀上方加入 we are here 旗標)
+    // 3. 圖表引擎 (調整氣球位置與移除各柱數值標籤)
     // ==========================================
     function renderCharts() {
       const container = document.getElementById('charts-container');
@@ -485,9 +485,9 @@
               label: l26, 
               data: activeMonths.map((_, i) => parseNum(rows[i]?.[k26])), 
               backgroundColor: '#ef4444',
-              // 透過 datalabels 外掛，只在最後一個月份 (Aug, 索引 7) 的 2026 柱狀上方顯示「we are here」
+              // 設定僅在最後一根柱子 (Aug, 索引 7) 的正上方顯示「📍 we are here」氣球標籤
               datalabels: {
-                align: 'end',
+                align: 'top',
                 anchor: 'end',
                 formatter: function(value, context) {
                   return context.dataIndex === activeMonths.length - 1 ? '📍 we are here' : '';
@@ -504,6 +504,11 @@
         options: {
           responsive: true,
           maintainAspectRatio: false,
+          layout: {
+            padding: {
+              top: 25 // 頂部預留空間，確保氣球完整顯示不被切掉
+            }
+          },
           plugins: { 
             legend: { position: 'top' }, 
             title: { display: false, text: titleText }
@@ -553,7 +558,7 @@
               borderColor: '#ef4444', 
               backgroundColor: '#ef4444', 
               tension: 0.1,
-              // 同樣在折線圖的最後一個點（Aug）上方標註「we are here」
+              // 在折線圖最後一個點上方標註「we are here」氣球
               datalabels: {
                 align: 'top',
                 anchor: 'end',
@@ -572,6 +577,11 @@
         options: {
           responsive: true,
           maintainAspectRatio: false,
+          layout: {
+            padding: {
+              top: 25 // 頂部預留空間，確保氣球完整顯示
+            }
+          },
           plugins: { 
             legend: { position: 'top' }, 
             title: { display: false }

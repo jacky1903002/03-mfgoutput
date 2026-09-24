@@ -290,7 +290,6 @@
       let colExtremes = {};
       if (sheetIndex > 0) {
         sheet.columns.forEach((col, cIdx) => {
-          // 從第 2 欄開始（索引 >= 1），排除通常為文字類別的第一欄
           if (cIdx >= 1) {
             let vals = sheet.data.map(row => parseNum(row[col.key])).filter(v => v !== 0);
             if (vals.length > 0) {
@@ -312,7 +311,6 @@
           td.className = 'px-4 py-2.5 transition-colors duration-200';
           let val = row[col.key] !== undefined ? row[col.key] : '';
 
-          // 若為第二個工作表且符合數值欄位，計算高對比熱力圖背景色
           if (sheetIndex > 0 && cIdx >= 1 && colExtremes[col.key]) {
             let numVal = parseNum(val);
             let { min, max } = colExtremes[col.key];
@@ -320,13 +318,11 @@
               let ratio = (numVal - min) / (max - min);
               let r, g, b;
               if (ratio <= 0.5) {
-                // 從深綠色 (134, 239, 172) 到 柔和過渡色 (254, 240, 138)
                 let subRatio = ratio * 2;
                 r = Math.round(134 + (254 - 134) * subRatio);
                 g = Math.round(239 + (240 - 239) * subRatio);
                 b = Math.round(172 + (138 - 172) * subRatio);
               } else {
-                // 從柔和過渡色 (254, 240, 138) 到 高鮮豔紅色 (239, 68, 68)
                 let subRatio = (ratio - 0.5) * 2;
                 r = Math.round(254 + (239 - 254) * subRatio);
                 g = Math.round(240 + (68 - 240) * subRatio);
@@ -537,6 +533,7 @@
                 align: 'end',
                 anchor: 'end',
                 formatter: function(value, context) {
+                  // 只有最後一個月份才顯示 we are here 標籤，其餘一律不顯示數字
                   return context.dataIndex === activeMonths.length - 1 ? '📍 we are here' : '';
                 },
                 color: '#ef4444',
@@ -604,6 +601,7 @@
                 align: 'top',
                 anchor: 'end',
                 formatter: function(value, context) {
+                  // 只有最後一個月份才顯示 we are here 標籤，其餘不顯示
                   return context.dataIndex === activeMonths.length - 1 ? '📍 we are here' : '';
                 },
                 color: '#ef4444',

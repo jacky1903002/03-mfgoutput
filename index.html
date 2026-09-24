@@ -359,7 +359,7 @@
     };
 
     // ==========================================
-    // 3. 圖表引擎 (精準鎖定 Aug 的 2026 紅色柱子正上方)
+    // 3. 圖表引擎 (僅保留氣球 📍 符號)
     // ==========================================
     function renderCharts() {
       const container = document.getElementById('charts-container');
@@ -466,7 +466,7 @@
       return combined;
     }
 
-    // 專用 Plugin：精準對齊 Aug 的 2026 紅色柱子正上方
+    // 專用 Plugin：僅繪製氣球 📍 於 Aug 的 2026 紅色柱子正上方
     const weAreHereBarPlugin = {
       id: 'weAreHereBarPlugin',
       afterDatasetsDraw(chart) {
@@ -478,21 +478,19 @@
         const bar = meta.data[lastIndex];
         if (!bar) return;
 
-        // 計算該根柱子的半寬，或者直接利用 bar.x 減去微調距離讓氣球完美對齊最後一根柱子中心
         const x = bar.x; 
         const y = bar.y - 12; // 柱子頂部上方 12px
 
         ctx.save();
-        ctx.font = 'bold 11px sans-serif';
-        ctx.fillStyle = '#ef4444';
+        ctx.font = 'bold 14px sans-serif';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'bottom';
-        ctx.fillText('📍 we are here', x, y);
+        ctx.fillText('📍', x, y);
         ctx.restore();
       }
     };
 
-    // 專用 Plugin：折線圖最後一個點上方
+    // 專用 Plugin：僅繪製氣球 📍 於折線圖最後一個點上方
     const weAreHereLinePlugin = {
       id: 'weAreHereLinePlugin',
       afterDatasetsDraw(chart) {
@@ -508,11 +506,10 @@
         const y = point.y - 12;
 
         ctx.save();
-        ctx.font = 'bold 11px sans-serif';
-        ctx.fillStyle = '#ef4444';
+        ctx.font = 'bold 14px sans-serif';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'bottom';
-        ctx.fillText('📍 we are here', x, y);
+        ctx.fillText('📍', x, y);
         ctx.restore();
       }
     };
@@ -539,7 +536,7 @@
           layout: {
             padding: {
               top: 35,
-              right: 25 // 額外加大右側留白，避免文字被圖表邊緣切掉
+              right: 25
             }
           },
           plugins: { 
@@ -594,7 +591,7 @@
           layout: {
             padding: {
               top: 35,
-              right: 25 // 額外加大右側留白
+              right: 25
             }
           },
           plugins: { 

@@ -7,7 +7,7 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- Chart.js -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <!-- Chart.js DataLabels Plugin (用於在圖表上直接顯示文字與 YOY %) -->
+  <!-- Chart.js DataLabels Plugin -->
   <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
   <!-- SheetJS (Excel 匯入匯出) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -361,7 +361,7 @@
     };
 
     // ==========================================
-    // 3. 圖表引擎 (X軸同步縮減、累積產值排名與 YoY 計算)
+    // 3. 圖表引擎 (歷史資料顯示全 12 個月，2026/排名對齊至有效月)
     // ==========================================
     function renderCharts() {
       const container = document.getElementById('charts-container');
@@ -426,7 +426,7 @@
         });
       };
 
-      // 嚴格掃描：找出 2026 年真正有填寫數值的最後一個月份索引
+      // 1. 找出 2026 年實際有資料的最後一個月份索引 (例如 8 月 = 7)
       let maxDataMonthIndex = 0;
       sheet.data.forEach((r, idx) => {
         let val26 = parseNum(r[k26]);
@@ -434,59 +434,76 @@
           maxDataMonthIndex = Math.max(maxDataMonthIndex, idx);
         }
       });
-
       const activeMonthsCount = maxDataMonthIndex + 1;
-      const months = allMonths.slice(0, activeMonthsCount);
 
-      const getCombinedRows = () => {
-        let combined = [];
-        months.forEach((m, idx) => {
-          let rowObj = { month: m, [k23]: 0, [k24]: 0, [k25]: 0, [k26]: 0 };
-          materials.forEach(mat => {
-            let mRows = getMaterialRows(mat);
-            let target = mRows[idx];
-            if (target) {
-              rowObj[k23] += parseNum(target[k23]);
-              rowObj[k24] += parseNum(target[k24]);
-              rowObj[k25] += parseNum(target[k25]);
-              rowObj[k26] += parseNum(target[k26]);
-            }
-          });
-          combined.push(rowObj);
-        });
-        return combined;
-      };
+      // 2. 前四張 (同期比較 Bar Chart)：X軸完整顯示 12 個月，但 2026 年超過有效月份的部分補 null
+      const fullMonthsRows = sheet.data.length > 0 ? sheet.data : allMonths.map(m => ({ month: m }));
 
-      // 1. 前四張：同期比較 Bar Chart
       materials.forEach((mat, idx) => {
-        let rows = getMaterialRows(mat).slice(0, activeMonthsCount);
-        drawBarComparisonChart(`sc${idx+1}`, rows, `${mat}產值同期比較`, k23, k24, k25, k26, mat);
+        let rows = getMaterialRows(mat);
+        drawBarComparisonChart(`sc${idx+1}`, rows, `${mat}產值同期比較`, k23, k24, k25, k26, activeMonthsCount);
       });
-      drawBarComparisonChart('sc4', getCombinedRows(), '合計產值同期比較', k23, k24, k25, k26, '合計');
+      drawBarComparisonChart('sc4', getCombinedRowsForAllMonths(materials, sheet, k23, k24, k25, k26), '合計產值同期比較', k23, k24, k25, k26, activeMonthsCount);
 
-      // 2. 後四張：累積產值 Line Chart (含 YoY 與 累積總額排名)
+      // 3. 後四張 (累積產值 Line Chart)：計算排名與 YoY（排名僅累計到 activeMonthsCount）
       materials.forEach((mat, idx) => {
-        let rows = getMaterialRows(mat).slice(0, activeMonthsCount);
-        drawCumulativeLineChart(`sc${idx+5}`, rows, `${mat}累積產值`, k23, k24, k25, k26);
+        let rows = getMaterialRows(mat);
+        drawCumulativeLineChart(`sc${idx+5}`, rows, `${mat}累積產值`, k23, k24, k25, k26, activeMonthsCount);
       });
-      drawCumulativeLineChart('sc8', getCombinedRows(), '合計累積產值', k23, k24, k25, k26);
+      drawCumulativeLineChart('sc8', getCombinedRowsForAllMonths(materials, sheet, k23, k24, k25, k26), '合計累積產值', k23, k24, k25, k26, activeMonthsCount);
     }
 
-    function drawBarComparisonChart(chartId, rows, titleText, k23, k24, k25, k26, matName) {
+    function getCombinedRowsForAllMonths(materials, sheet, k23, k24, k25, k26) {
+      const allMonths = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+      let combined = [];
+      allMonths.forEach((m, idx) => {
+        let rowObj = { month: m, [k23]: 0, [k24]: 0, [k25]: 0, [k26]: 0 };
+        materials.forEach(mat => {
+          let mRows = sheet.data.filter(r => {
+            let cat = String(r.category || r[sheet.columns[0].key] || '').trim().toLowerCase();
+            let mLower = mat.toLowerCase();
+            if (mLower === "鎢鉬鉭") return cat.includes("鎢鉬鉭") || cat.includes("鎢鉬鈕");
+            if (mLower === "other") return cat.includes("other") || cat.includes("其他");
+            return cat.includes(mLower);
+          });
+          let target = mRows[idx];
+          if (target) {
+            rowObj[k23] += parseNum(target[k23]);
+            rowObj[k24] += parseNum(target[k24]);
+            rowObj[k25] += parseNum(target[k25]);
+            rowObj[k26] += parseNum(target[k26]);
+          }
+        });
+        combined.push(rowObj);
+      });
+      return combined;
+    }
+
+    function drawBarComparisonChart(chartId, rows, titleText, k23, k24, k25, k26, activeLimit) {
       const canvas = document.getElementById(`canvas-${chartId}`);
       if (!canvas) return;
       if (window.chartInstances[chartId]) window.chartInstances[chartId].destroy();
 
-      const labels = rows.map(r => r.month || r[Object.keys(r)[1]] || 'Month');
+      const allMonths = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+      const labels = allMonths;
+
       window.chartInstances[chartId] = new Chart(canvas, {
         type: 'bar',
         data: {
           labels: labels,
           datasets: [
-            { label: '2023', data: rows.map(r => parseNum(r[k23])), backgroundColor: '#10b981' },
-            { label: '2024', data: rows.map(r => parseNum(r[k24])), backgroundColor: '#3b82f6' },
-            { label: '2025', data: rows.map(r => parseNum(r[k25])), backgroundColor: '#f59e0b' },
-            { label: '2026', data: rows.map(r => { let v = parseNum(r[k26]); return v > 0 ? v : null; }), backgroundColor: '#ef4444' }
+            { label: '2023', data: allMonths.map((_, i) => parseNum(rows[i]?.[k23])), backgroundColor: '#10b981' },
+            { label: '2024', data: allMonths.map((_, i) => parseNum(rows[i]?.[k24])), backgroundColor: '#3b82f6' },
+            { label: '2025', data: allMonths.map((_, i) => parseNum(rows[i]?.[k25])), backgroundColor: '#f59e0b' },
+            { 
+              label: '2026', 
+              data: allMonths.map((_, i) => { 
+                if (i >= activeLimit) return null;
+                let v = parseNum(rows[i]?.[k26]); 
+                return v > 0 ? v : null; 
+              }), 
+              backgroundColor: '#ef4444' 
+            }
           ]
         },
         options: {
@@ -497,48 +514,53 @@
       });
     }
 
-    function drawCumulativeLineChart(chartId, rows, titleText, k23, k24, k25, k26) {
+    function drawCumulativeLineChart(chartId, rows, titleText, k23, k24, k25, k26, activeLimit) {
       const canvas = document.getElementById(`canvas-${chartId}`);
       if (!canvas) return;
       if (window.chartInstances[chartId]) window.chartInstances[chartId].destroy();
 
-      const labels = rows.map(r => r.month || r[Object.keys(r)[1]] || 'Month');
+      const allMonths = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+      const labels = allMonths;
       
       let sum23 = 0, sum24 = 0, sum25 = 0, sum26 = 0;
-      const data23 = rows.map(r => { sum23 += parseNum(r[k23]); return sum23; });
-      const data24 = rows.map(r => { sum24 += parseNum(r[k24]); return sum24; });
-      const data25 = rows.map(r => { sum25 += parseNum(r[k25]); return sum25; });
+      const data23 = allMonths.map((_, i) => { sum23 += parseNum(rows[i]?.[k23]); return sum23; });
+      const data24 = allMonths.map((_, i) => { sum24 += parseNum(rows[i]?.[k24]); return sum24; });
+      const data25 = allMonths.map((_, i) => { sum25 += parseNum(rows[i]?.[k25]); return sum25; });
       
-      const data26 = rows.map(r => {
-        let val = parseNum(r[k26]);
+      const data26 = allMonths.map((_, i) => {
+        if (i >= activeLimit) return null;
+        let val = parseNum(rows[i]?.[k26]);
         if (val <= 0) return null;
         sum26 += val;
         return sum26;
       });
 
-      // 計算最終截止月份的累積總額與 YoY 成長率
-      const final23 = data23.length > 0 ? data23[data23.length - 1] : 0;
-      const final24 = data24.length > 0 ? data24[data24.length - 1] : 0;
-      const final25 = data25.length > 0 ? data25[data25.length - 1] : 0;
-      const final26 = sum26 > 0 ? sum26 : (data26.length > 0 ? (data26[data26.length - 1] || 0) : 0);
+      // 1. 排名計算：嚴格只累計統計到最後一年有資料的那個月份 (activeLimit)
+      let rankSum23 = 0, rankSum24 = 0, rankSum25 = 0, rankSum26 = 0;
+      for (let i = 0; i < activeLimit; i++) {
+        rankSum23 += parseNum(rows[i]?.[k23]);
+        rankSum24 += parseNum(rows[i]?.[k24]);
+        rankSum25 += parseNum(rows[i]?.[k25]);
+        rankSum26 += parseNum(rows[i]?.[k26]);
+      }
 
-      const yoy24 = final23 > 0 ? ((final24 - final23) / final23 * 100).toFixed(1) : 0;
-      const yoy25 = final24 > 0 ? ((final25 - final24) / final24 * 100).toFixed(1) : 0;
-      const yoy26 = final25 > 0 ? ((final26 - final25) / final25 * 100).toFixed(1) : 0;
-
-      // 排名計算
       const totals = [
-        { year: '2023', val: final23 },
-        { year: '2024', val: final24 },
-        { year: '2025', val: final25 },
-        { year: '2026', val: final26 }
+        { year: '2023', val: rankSum23 },
+        { year: '2024', val: rankSum24 },
+        { year: '2025', val: rankSum25 },
+        { year: '2026', val: rankSum26 }
       ];
       totals.sort((a, b) => b.val - a.val);
 
-      // 更新上方標題列顯示排名與 YoY
+      // 2. YoY 計算：只顯示最後一年與前一年的比較 (2026 與 2025 在有效月份內的對比)
+      const prev25AtLimit = rankSum25;
+      const final26 = rankSum26;
+      const yoy26 = prev25AtLimit > 0 ? ((final26 - prev25AtLimit) / prev25AtLimit * 100).toFixed(1) : 0;
+
+      // 更新上方標題列顯示排名與單一 YoY (26 YoY)
       const titleEl = document.getElementById(`title-${chartId}`);
       if (titleEl) {
-        titleEl.innerHTML = `${titleText} &nbsp;|&nbsp; <span class="text-xs text-blue-600 font-bold">Top1:${totals[0].year}</span> <span class="text-xs text-slate-500">(24 YoY: ${yoy24}%, 25 YoY: ${yoy25}%, 26 YoY: ${yoy26}%)</span>`;
+        titleEl.innerHTML = `${titleText} &nbsp;|&nbsp; <span class="text-xs text-blue-600 font-bold">Top1:${totals[0].year}</span> <span class="text-xs text-slate-500">(26 YoY: ${yoy26}%)</span>`;
       }
 
       window.chartInstances[chartId] = new Chart(canvas, {
@@ -561,8 +583,11 @@
             datalabels: {
               align: 'top',
               formatter: (value, context) => {
-                // 只在最後一個有效資料點標註數值或 YoY，避免畫面雜亂
-                if (context.dataIndex === context.dataset.data.length - 1 && value !== null) {
+                // 在該 dataset 最後一個有效數值點標註數字
+                if (value !== null && context.dataIndex === activeLimit - 1 && context.dataset.label === '2026') {
+                  return (value / 1000000).toFixed(1) + 'M';
+                }
+                if (value !== null && context.dataIndex === 11 && context.dataset.label !== '2026') {
                   return (value / 1000000).toFixed(1) + 'M';
                 }
                 return '';

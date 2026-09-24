@@ -361,7 +361,7 @@
     };
 
     // ==========================================
-    // 3. 圖表引擎 (強制限制 Top1 與 YoY 抓取同期 1~8 月)
+    // 3. 圖表引擎 (動態智慧識別最新年份與欄位)
     // ==========================================
     function renderCharts() {
       const container = document.getElementById('charts-container');
@@ -403,14 +403,17 @@
       const allMonths = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
       const materials = ["石墨", "鎢鉬鉭", "other"];
 
-      const findKey = (yearStr) => {
-        let col = sheet.columns.find(c => String(c.title).toLowerCase().includes(yearStr.toLowerCase()) || String(c.key).toLowerCase().includes(yearStr.toLowerCase()));
-        return col ? col.key : yearStr;
-      };
-      const k23 = findKey('2023');
-      const k24 = findKey('2024');
-      const k25 = findKey('2025');
-      const k26 = findKey('2026');
+      // 自動抓取最後四個欄位作為年份對應 (通常依序為 2023, 2024, 2025, 2026)
+      const numCols = sheet.columns.slice(2);
+      const k23 = numCols[numCols.length - 4] ? numCols[numCols.length - 4].key : '2023';
+      const k24 = numCols[numCols.length - 3] ? numCols[numCols.length - 3].key : '2024';
+      const k25 = numCols[numCols.length - 2] ? numCols[numCols.length - 2].key : '2025';
+      const k26 = numCols[numCols.length - 1] ? numCols[numCols.length - 1].key : '2026';
+
+      const label23 = numCols[numCols.length - 4] ? numCols[numCols.length - 4].title : '2023';
+      const label24 = numCols[numCols.length - 3] ? numCols[numCols.length - 3].title : '2024';
+      const label25 = numCols[numCols.length - 2] ? numCols[numCols.length - 2].title : '2025';
+      const label26 = numCols[numCols.length - 1] ? numCols[numCols.length - 1].title : '2026';
 
       const getMaterialRows = (mat) => {
         return sheet.data.filter(r => {
@@ -426,27 +429,27 @@
         });
       };
 
-      // 1. 嚴格找出 2026 年有填寫資料的最後月份索引 (例如 8 月 = 7)
+      // 找出最新年份（即最右側欄位）有填寫資料的最後月份索引 (例如 8 月 = 7)
       let maxDataMonthIndex = 0;
       sheet.data.forEach((r, idx) => {
-        let val26 = parseNum(r[k26]);
-        if (val26 > 0) {
+        let valLatest = parseNum(r[k26]);
+        if (valLatest > 0) {
           maxDataMonthIndex = Math.max(maxDataMonthIndex, idx);
         }
       });
-      const activeLimit = maxDataMonthIndex + 1; // 8
+      const activeLimit = maxDataMonthIndex + 1;
 
       materials.forEach((mat, idx) => {
         let rows = getMaterialRows(mat);
-        drawBarComparisonChart(`sc${idx+1}`, rows, `${mat}產值同期比較`, k23, k24, k25, k26, activeLimit);
+        drawBarComparisonChart(`sc${idx+1}`, rows, `${mat}產值同期比較`, k23, k24, k25, k26, label23, label24, label25, label26, activeLimit);
       });
-      drawBarComparisonChart('sc4', getCombinedRowsForAllMonths(materials, sheet, k23, k24, k25, k26), '合計產值同期比較', k23, k24, k25, k26, activeLimit);
+      drawBarComparisonChart('sc4', getCombinedRowsForAllMonths(materials, sheet, k23, k24, k25, k26), '合計產值同期比較', k23, k24, k25, k26, label23, label24, label25, label26, activeLimit);
 
       materials.forEach((mat, idx) => {
         let rows = getMaterialRows(mat);
-        drawCumulativeLineChart(`sc${idx+5}`, rows, `${mat}累積產值`, k23, k24, k25, k26, activeLimit);
+        drawCumulativeLineChart(`sc${idx+5}`, rows, `${mat}累積產值`, k23, k24, k25, k26, label23, label24, label25, label26, activeLimit);
       });
-      drawCumulativeLineChart('sc8', getCombinedRowsForAllMonths(materials, sheet, k23, k24, k25, k26), '合計累積產值', k23, k24, k25, k26, activeLimit);
+      drawCumulativeLineChart('sc8', getCombinedRowsForAllMonths(materials, sheet, k23, k24, k25, k26), '合計累積產值', k23, k24, k25, k26, label23, label24, label25, label26, activeLimit);
     }
 
     function getCombinedRowsForAllMonths(materials, sheet, k23, k24, k25, k26) {
@@ -475,7 +478,7 @@
       return combined;
     }
 
-    function drawBarComparisonChart(chartId, rows, titleText, k23, k24, k25, k26, activeLimit) {
+    function drawBarComparisonChart(chartId, rows, titleText, k23, k24, k25, k26, l23, l24, l25, l26, activeLimit) {
       const canvas = document.getElementById(`canvas-${chartId}`);
       if (!canvas) return;
       if (window.chartInstances[chartId]) window.chartInstances[chartId].destroy();
@@ -487,11 +490,11 @@
         data: {
           labels: allMonths,
           datasets: [
-            { label: '2023', data: allMonths.map((_, i) => parseNum(rows[i]?.[k23])), backgroundColor: '#10b981' },
-            { label: '2024', data: allMonths.map((_, i) => parseNum(rows[i]?.[k24])), backgroundColor: '#3b82f6' },
-            { label: '2025', data: allMonths.map((_, i) => parseNum(rows[i]?.[k25])), backgroundColor: '#f59e0b' },
+            { label: l23, data: allMonths.map((_, i) => parseNum(rows[i]?.[k23])), backgroundColor: '#10b981' },
+            { label: l24, data: allMonths.map((_, i) => parseNum(rows[i]?.[k24])), backgroundColor: '#3b82f6' },
+            { label: l25, data: allMonths.map((_, i) => parseNum(rows[i]?.[k25])), backgroundColor: '#f59e0b' },
             { 
-              label: '2026', 
+              label: l26, 
               data: allMonths.map((_, i) => { 
                 if (i >= activeLimit) return null;
                 let v = parseNum(rows[i]?.[k26]); 
@@ -509,14 +512,13 @@
       });
     }
 
-    function drawCumulativeLineChart(chartId, rows, titleText, k23, k24, k25, k26, activeLimit) {
+    function drawCumulativeLineChart(chartId, rows, titleText, k23, k24, k25, k26, l23, l24, l25, l26, activeLimit) {
       const canvas = document.getElementById(`canvas-${chartId}`);
       if (!canvas) return;
       if (window.chartInstances[chartId]) window.chartInstances[chartId].destroy();
 
       const allMonths = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
       
-      // 1. 各年度完整 12 個月的累積線條
       let s23 = 0, s24 = 0, s25 = 0, s26 = 0;
       const data23 = allMonths.map((_, i) => { s23 += parseNum(rows[i]?.[k23]); return s23; });
       const data24 = allMonths.map((_, i) => { s24 += parseNum(rows[i]?.[k24]); return s24; });
@@ -530,7 +532,7 @@
         return s26;
       });
 
-      // 2. 【關鍵修復】Top1 排名：各年度一律嚴格只加總到 2026 有效的最後月份 (1~8月)，以進行公平的同期比拼
+      // 同期加總比對 (只取到 activeLimit 8月)
       let periodSum23 = 0, periodSum24 = 0, periodSum25 = 0, periodSum26 = 0;
       for (let i = 0; i < activeLimit; i++) {
         periodSum23 += parseNum(rows[i]?.[k23]);
@@ -540,20 +542,19 @@
       }
 
       const totals = [
-        { year: '2023', val: periodSum23 },
-        { year: '2024', val: periodSum24 },
-        { year: '2025', val: periodSum25 },
-        { year: '2026', val: periodSum26 }
+        { year: l23, val: periodSum23 },
+        { year: l24, val: periodSum24 },
+        { year: l25, val: periodSum25 },
+        { year: l26, val: periodSum26 }
       ];
       totals.sort((a, b) => b.val - a.val);
 
-      // 3. YoY 計算：以 2026 同期 (1-8月) 比對 2025 同期 (1-8月)
-      const yoy26 = periodSum25 > 0 ? ((periodSum26 - periodSum25) / periodSum25 * 100).toFixed(1) : 0;
+      // YoY 計算 (最新年份同期對比前一年同期)
+      const yoyVal = periodSum25 > 0 ? ((periodSum26 - periodSum25) / periodSum25 * 100).toFixed(1) : 0;
 
-      // 更新標題列
       const titleEl = document.getElementById(`title-${chartId}`);
       if (titleEl) {
-        titleEl.innerHTML = `${titleText} &nbsp;|&nbsp; <span class="text-xs text-blue-600 font-bold">Top1:${totals[0].year}</span> <span class="text-xs text-slate-500">(26 YoY: ${yoy26}%)</span>`;
+        titleEl.innerHTML = `${titleText} &nbsp;|&nbsp; <span class="text-xs text-blue-600 font-bold">Top1:${totals[0].year}</span> <span class="text-xs text-slate-500">(YoY: ${yoyVal}%)</span>`;
       }
 
       window.chartInstances[chartId] = new Chart(canvas, {
@@ -561,10 +562,10 @@
         data: {
           labels: allMonths,
           datasets: [
-            { label: '2023', data: data23, borderColor: '#10b981', backgroundColor: '#10b981', tension: 0.1 },
-            { label: '2024', data: data24, borderColor: '#3b82f6', backgroundColor: '#3b82f6', tension: 0.1 },
-            { label: '2025', data: data25, borderColor: '#f59e0b', backgroundColor: '#f59e0b', tension: 0.1 },
-            { label: '2026', data: data26, borderColor: '#ef4444', backgroundColor: '#ef4444', tension: 0.1, spanGaps: false }
+            { label: l23, data: data23, borderColor: '#10b981', backgroundColor: '#10b981', tension: 0.1 },
+            { label: l24, data: data24, borderColor: '#3b82f6', backgroundColor: '#3b82f6', tension: 0.1 },
+            { label: l25, data: data25, borderColor: '#f59e0b', backgroundColor: '#f59e0b', tension: 0.1 },
+            { label: l26, data: data26, borderColor: '#ef4444', backgroundColor: '#ef4444', tension: 0.1, spanGaps: false }
           ]
         },
         options: {
@@ -576,10 +577,10 @@
             datalabels: {
               align: 'top',
               formatter: (value, context) => {
-                if (value !== null && context.dataIndex === activeLimit - 1 && context.dataset.label === '2026') {
+                if (value !== null && context.dataIndex === activeLimit - 1 && context.dataset.label === l26) {
                   return (value / 1000000).toFixed(1) + 'M';
                 }
-                if (value !== null && context.dataIndex === 11 && context.dataset.label !== '2026') {
+                if (value !== null && context.dataIndex === 11 && context.dataset.label !== l26) {
                   return (value / 1000000).toFixed(1) + 'M';
                 }
                 return '';

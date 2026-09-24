@@ -361,7 +361,7 @@
     };
 
     // ==========================================
-    // 3. 圖表引擎 (橫軸強制只顯示 Jan ~ Aug，隱藏 9-12 月)
+    // 3. 圖表引擎 (最後一根柱狀上方加入 we are here 旗標)
     // ==========================================
     function renderCharts() {
       const container = document.getElementById('charts-container');
@@ -400,7 +400,6 @@
     }
 
     function buildAllEightComparisonCharts(sheet) {
-      // 僅取前 8 個月 (Jan ~ Aug)，直接將 9-12 月從圖表中裁切掉
       const activeMonths = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug"];
       const materials = ["石墨", "鎢鉬鉭", "other"];
 
@@ -482,7 +481,24 @@
             { label: l23, data: activeMonths.map((_, i) => parseNum(rows[i]?.[k23])), backgroundColor: '#10b981' },
             { label: l24, data: activeMonths.map((_, i) => parseNum(rows[i]?.[k24])), backgroundColor: '#3b82f6' },
             { label: l25, data: activeMonths.map((_, i) => parseNum(rows[i]?.[k25])), backgroundColor: '#f59e0b' },
-            { label: l26, data: activeMonths.map((_, i) => parseNum(rows[i]?.[k26])), backgroundColor: '#ef4444' }
+            { 
+              label: l26, 
+              data: activeMonths.map((_, i) => parseNum(rows[i]?.[k26])), 
+              backgroundColor: '#ef4444',
+              // 透過 datalabels 外掛，只在最後一個月份 (Aug, 索引 7) 的 2026 柱狀上方顯示「we are here」
+              datalabels: {
+                align: 'end',
+                anchor: 'end',
+                formatter: function(value, context) {
+                  return context.dataIndex === activeMonths.length - 1 ? '📍 we are here' : '';
+                },
+                color: '#ef4444',
+                font: {
+                  weight: 'bold',
+                  size: 11
+                }
+              }
+            }
           ]
         },
         options: {
@@ -490,10 +506,10 @@
           maintainAspectRatio: false,
           plugins: { 
             legend: { position: 'top' }, 
-            title: { display: false, text: titleText },
-            datalabels: { display: false }
+            title: { display: false, text: titleText }
           }
-        }
+        },
+        plugins: [ChartDataLabels]
       });
     }
 
@@ -531,7 +547,26 @@
             { label: l23, data: data23, borderColor: '#10b981', backgroundColor: '#10b981', tension: 0.1 },
             { label: l24, data: data24, borderColor: '#3b82f6', backgroundColor: '#3b82f6', tension: 0.1 },
             { label: l25, data: data25, borderColor: '#f59e0b', backgroundColor: '#f59e0b', tension: 0.1 },
-            { label: l26, data: data26, borderColor: '#ef4444', backgroundColor: '#ef4444', tension: 0.1 }
+            { 
+              label: l26, 
+              data: data26, 
+              borderColor: '#ef4444', 
+              backgroundColor: '#ef4444', 
+              tension: 0.1,
+              // 同樣在折線圖的最後一個點（Aug）上方標註「we are here」
+              datalabels: {
+                align: 'top',
+                anchor: 'end',
+                formatter: function(value, context) {
+                  return context.dataIndex === activeMonths.length - 1 ? '📍 we are here' : '';
+                },
+                color: '#ef4444',
+                font: {
+                  weight: 'bold',
+                  size: 11
+                }
+              }
+            }
           ]
         },
         options: {
@@ -539,10 +574,10 @@
           maintainAspectRatio: false,
           plugins: { 
             legend: { position: 'top' }, 
-            title: { display: false },
-            datalabels: { display: false }
+            title: { display: false }
           }
-        }
+        },
+        plugins: [ChartDataLabels]
       });
     }
 

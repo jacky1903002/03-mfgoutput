@@ -186,25 +186,51 @@
       auth.signOut();
     }
 
-    function autoSaveToFirebase() {
+   function autoSaveToFirebase() {
       if (!window.isAuthorizedEditor) return;
-      if (!isDataLoadedFromCloud && window.appState.sheets[0].data.length === 0) return;
       
+      // 改進：只要整體 appState 存在即可快取與儲存，不再侷限於 sheets[0]
       localStorage.setItem('mfg_app_state_cache', JSON.stringify(window.appState));
-      db.ref('mfg_app_state').set(window.appState);
+      db.ref('mfg_app_state').set(window.appState)
+        .catch(err => console.error("自動儲存至 Firebase 失敗:", err));
     }
 
     function loadFromFirebase() {
-      db.ref('mfg_app_state').once('value').then(snapshot => {
+      const dbRef = db.ref('mfg_app_state');
+      
+      dbRef.once('value').then(snapshot => {
         const val = snapshot.val();
-        if (val && val.sheets && val.sheets.length > 0 && val.sheets[0].data.length > 0) {
+        if (val && val.sheets && val.sheets.length > 0) {
+          // 只要雲端有資料就採用雲端
           window.appState = val;
           localStorage.setItem('mfg_app_state_cache', JSON.stringify(window.appState));
-        } else if (window.appState.sheets[0].data.length > 0) {
-          db.ref('mfg_app_state').set(window.appState);
+        } else {
+          // 如果雲端沒資料，把本地預設或快取推上去
+          dbRef.set(window.appState);
         }
         isDataLoadedFromCloud = true;
         renderApp();
+
+        // 監聽後續雲端變更（建議加上簡易防護避免無限迴圈或頻繁重繪）
+        dbRef.on('value', snap => {
+          const liveVal = snap.val();
+          if (liveVal && liveVal.sheets) {
+            // 只有當雲端資料與目前本地字串不同步時才更新，避免游標跑掉
+            const currentStr = JSON.stringify(window.appState);
+            const liveStr = JSON.stringify(liveVal);
+            if (currentStr !== liveStr) {
+              window.appState = liveVal;
+              localStorage.setItem('mfg_app_state_cache', JSON.stringify(window.appState));
+              renderApp();
+            }
+          }
+        });
+      }).catch(err => {
+        console.error("載入 Firebase 失敗:", err);
+        isDataLoadedFromCloud = true;
+        renderApp();
+      });
+    }
 
         db.ref('mfg_app_state').on('value', snap => {
           const liveVal = snap.val();

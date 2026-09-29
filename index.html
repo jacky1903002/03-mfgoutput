@@ -506,7 +506,7 @@ function buildWipHeatmapDirect(sheet) {
         let catName = String(row[sheet.columns[0].key] || '未命名').trim();
         let rowValues = [];
         cols.forEach(col => {
-          // 加上 Math.round 進行四捨五入取整數
+          // 四捨五入取整數計算極值
           let v = Math.round(parseNum(row[col.key]));
           if (v > 0) rowValues.push(v);
         });
@@ -517,9 +517,10 @@ function buildWipHeatmapDirect(sheet) {
         html += `<tr class="hover:bg-slate-50/50"><td class="px-4 py-3 font-medium text-slate-700 border-r bg-slate-50/30">${catName}</td>`;
         
         cols.forEach(col => {
-          // 同樣對每個儲存格數值進行四捨五入
+          // 四捨五入取整數顯示與計算比例
           let val = Math.round(parseNum(row[col.key]));
           let bgStyle = 'background-color: transparent;';
+          let textColor = 'color: inherit;';
           
           if (val > 0 && rowMax !== rowMin) {
             let ratio = (val - rowMin) / (rowMax - rowMin);
@@ -527,7 +528,7 @@ function buildWipHeatmapDirect(sheet) {
             let g = Math.round(247 + (68 - 247) * ratio);
             let b = Math.round(208 + (68 - 208) * ratio);
             bgStyle = `background-color: rgb(${r}, ${g}, ${b});`;
-// 數值高時背景偏紅，字體自動轉為白色以維持極佳的可讀性
+            
             if (ratio > 0.5) {
               textColor = 'color: #ffffff;';
             }
@@ -544,7 +545,6 @@ function buildWipHeatmapDirect(sheet) {
       html += `</tbody></table>`;
       container.innerHTML = html;
     }
-
     function buildWideTableLineChart(sheet) {
       const canvas = document.getElementById('canvas-sheet3');
       if (!canvas) return;

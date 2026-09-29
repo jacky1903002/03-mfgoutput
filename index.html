@@ -79,9 +79,9 @@
     <div id="charts-container" class="grid grid-cols-1 md:grid-cols-2 gap-6"></div>
   </main>
 
- <script>
+  <script>
     // ==========================================
-    // 1. Firebase 初始化與強固型資料庫連線
+    // 1. Firebase 初始化與資料防護鎖
     // ==========================================
     const firebaseConfig = {
       apiKey: "AIzaSyB7Oss_eMXO4i4PBs9ZziiREb4r9Ko6a74",
@@ -94,10 +94,9 @@
       measurementId: "G-0805TLXWJH"
     };
 
-    const app = firebase.initializeApp(firebaseConfig);
+    firebase.initializeApp(firebaseConfig);
     const auth = firebase.auth();
-    // 明確指定 databaseURL 確保連線正確無誤
-    const db = firebase.database(app, "https://mfgoutput03-default-rtdb.firebaseio.com");
+    const db = firebase.database();
 
     const defaultState = {
       currentSheetId: 'sheet_1',
@@ -163,13 +162,11 @@
         window.isAuthorizedEditor = true;
         document.getElementById('auth-modal').classList.add('hidden');
         document.getElementById('user-email-display').textContent = user.email;
-        console.log("Firebase 登入成功：", user.email);
         loadFromFirebase();
       } else {
         window.isAuthorizedEditor = false;
         document.getElementById('auth-modal').classList.remove('hidden');
         document.getElementById('user-email-display').textContent = '未登入';
-        console.log("目前尚未登入 Firebase");
         renderApp();
       }
     });
@@ -189,26 +186,14 @@
       auth.signOut();
     }
 
-    // 強制寫入 Firebase 雲端函式
-    function autoSaveToFirebase(callback) {
-      if (!window.isAuthorizedEditor) {
-        console.warn("未授權編輯，無法同步至 Firebase");
-        if (callback) callback(false);
-        return;
-      }
+    function autoSaveToFirebase() {
+      if (!window.isAuthorizedEditor) return;
       
+      // 確保將最新狀態寫入 localStorage 與 Firebase
       localStorage.setItem('mfg_app_state_cache', JSON.stringify(window.appState));
-      
-      db.ref('mfg_app_state').set(window.appState)
-        .then(() => {
-          console.log("【成功】資料已同步寫入 Firebase 雲端！");
-          if (callback) callback(true);
-        })
-        .catch(err => {
-          console.error("【失敗】Firebase 寫入錯誤：", err);
-          alert("Firebase 寫入失敗：" + err.message);
-          if (callback) callback(false);
-        });
+      db.ref('mfg_app_state').set(window.appState).catch(err => {
+        console.error("同步至 Firebase 失敗:", err);
+      });
     }
 
     function loadFromFirebase() {
@@ -217,18 +202,16 @@
         if (val && val.sheets && val.sheets.length > 0) {
           window.appState = val;
           localStorage.setItem('mfg_app_state_cache', JSON.stringify(window.appState));
-          console.log("已從 Firebase 雲端載入最新資料");
         } else {
           db.ref('mfg_app_state').set(window.appState);
-          console.log("雲端無資料，已初始化預設資料至 Firebase");
         }
         isDataLoadedFromCloud = true;
         renderApp();
 
-        // 即時監聽雲端變更
         db.ref('mfg_app_state').on('value', snap => {
           const liveVal = snap.val();
           if (liveVal && liveVal.sheets && liveVal.sheets.length > 0) {
+            // 只有在非本地編輯同步時才更新，或直接同步
             window.appState = liveVal;
             localStorage.setItem('mfg_app_state_cache', JSON.stringify(window.appState));
             renderApp();
@@ -414,110 +397,13 @@
     };
 
     // ==========================================
-    // 3. Excel 匯入與匯出功能 (強固型雲端同步)
+    // 3. 圖表與熱力表引擎
     // ==========================================
-    window.exportToExcel = function() {
-      const wb = XLSX.utils.book_new();
-      window.appState.sheets.forEach(sheet => {
-        let wsData = [];
-        let headers = sheet.columns.map(c => c.title);
-        wsData.push(headers);
-        sheet.data.forEach(row => {
-          let rArr = sheet.columns.map(c => row[c.key] !== undefined ? row[c.key] : '');
-          wsData.push(rArr);
-        });
-        const ws = XLSX.utils.aoa_to_sheet(wsData);
-        XLSX.utils.book_append_sheet(wb, ws, sheet.name);
-      });
-      XLSX.writeFile(wb, "MFG_Analysis_Export.xlsx");
-    };
-
-    window.importFromExcel = function(event) {
-      if (!window.isAuthorizedEditor) { 
-        alert("需要登入管理者權限才能匯入資料！"); 
-        event.target.value = '';
-        return; 
-      }
-      const file = event.target.files[0];
-      if (!file) return;
-
-      const reader = new FileReader();
-      reader.onload = function(e) {
-        try {
-          const data = new Uint8Array(e.target.result);
-          const workbook = XLSX.read(data, { type: 'array' });
-          let newSheets = [];
-
-          workbook.SheetNames.forEach((sheetName, sIdx) => {
-            const worksheet = workbook.Sheets[sheetName];
-            const json = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
-            if (json.length === 0) return;
-
-            let headerRow = json[0] || [];
-            let columns = [];
-            headerRow.forEach((hName, hIdx) => {
-              let key = (hIdx === 0) ? 'category' : 'col_' + hIdx + '_' + Date.now();
-              columns.push({ key: key, title: String(hName || `欄位${hIdx+1}`) });
-            });
-
-            if (columns.length === 0) {
-              columns = [{ key: 'category', title: '類別' }, { key: 'm1', title: '數值' }];
-            }
-
-            let rowsData = [];
-            for (let i = 1; i < json.length; i++) {
-              let rVal = json[i];
-              if (!rVal || rVal.length === 0) continue;
-              let rowObj = {};
-              columns.forEach((col, cIdx) => {
-                rowObj[col.key] = rVal[cIdx] !== undefined ? rVal[cIdx] : (cIdx === 0 ? '類別' + i : 0);
-              });
-              rowsData.push(rowObj);
-            }
-
-            newSheets.push({
-              id: 'sheet_imported_' + sIdx + '_' + Date.now(),
-              name: sheetName,
-              columns: columns,
-              data: rowsData
-            });
-          });
-
-          if (newSheets.length > 0) {
-            window.appState.sheets = newSheets;
-            window.appState.currentSheetId = newSheets[0].id;
-            renderApp();
-            
-            // 強制寫入 Firebase 雲端
-            autoSaveToFirebase((success) => {
-              if (success) {
-                alert("Excel 匯入成功，並已成功同步儲存至 Firebase 雲端！");
-              } else {
-                alert("Excel 本地解析成功，但 Firebase 同步被拒絕，請檢查資料庫規則設定。");
-              }
-            });
-          } else {
-            alert("匯入的檔案沒有有效資料。");
-          }
-        } catch (err) {
-          console.error(err);
-          alert("解析 Excel 失敗：" + err.message);
-        }
-        event.target.value = '';
-      };
-      reader.readAsArrayBuffer(file);
-    };
-
-    // ==========================================
-    // 4. 圖表與熱力表引擎 (支援按類別作月份顏色區分)
-    // ==========================================
-    window.renderCharts = function() {
+    function renderCharts() {
       const container = document.getElementById('charts-container');
       container.innerHTML = '';
       const sheetIndex = window.appState.sheets.findIndex(s => s.id === window.appState.currentSheetId);
       const sheet = window.appState.sheets[sheetIndex];
-
-      if (!sheet) return;
 
       if (sheetIndex === 0) {
         const chartIds = ['sc1', 'sc2', 'sc3', 'sc4', 'sc5', 'sc6', 'sc7', 'sc8'];
@@ -541,25 +427,26 @@
 
         if (sheet) buildAllEightComparisonCharts(sheet);
 
-      } else if (sheetIndex === 1 || sheet.name.includes('WIP') || sheet.name.includes('熱力')) {
+      } else if (sheetIndex === 1) {
+        // 第二個工作表：線上WIP 熱力圖（獨立各列對比：大紅、小綠）
         const wrapper = document.createElement('div');
         wrapper.className = 'bg-white p-6 rounded-xl shadow-sm border flex flex-col md:col-span-2';
         wrapper.id = `export-area-sheet2-heatmap`;
         wrapper.innerHTML = `
           <div class="flex justify-between items-center mb-4">
             <div>
-              <h3 class="font-bold text-slate-800 text-lg">${sheet.name} - 熱力圖分析</h3>
-              <p class="text-xs text-slate-500 mt-0.5">每個類別各月份數值獨立比較：數值越大越紅、越小越淺綠</p>
+              <h3 class="font-bold text-slate-800 text-lg">線上WIP - 熱力圖分析</h3>
+              <p class="text-xs text-slate-500 mt-0.5">依各部門(列)各自獨立呈現大紅小綠對比</p>
             </div>
-            <button onclick="window.exportChartToPNG('sheet2-heatmap', '${sheet.name}熱力圖')" class="export-btn text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 px-3 py-1.5 rounded transition">匯出圖片</button>
+            <button onclick="window.exportChartToPNG('sheet2-heatmap', 'WIP熱力圖')" class="export-btn text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 px-3 py-1.5 rounded transition">匯出圖片</button>
           </div>
           <div id="heatmap-container" class="overflow-x-auto w-full"></div>
         `;
         container.appendChild(wrapper);
 
-        buildWipHeatmapPerRow(sheet);
+        buildWipHeatmapDirect(sheet);
 
-      } else {
+      } else if (sheetIndex === 2) {
         const wrapper = document.createElement('div');
         wrapper.className = 'bg-white p-5 rounded-xl shadow-sm border flex flex-col md:col-span-2';
         wrapper.id = `export-area-sheet3`;
@@ -585,12 +472,12 @@
       return isNaN(n) ? 0 : n;
     }
 
-    // 依據「每個類別（橫向各月份）」獨立計算極值並上色
-    function buildWipHeatmapPerRow(sheet) {
+    // 建立線上WIP直接熱力圖（依各類別各自獨立計算高低對比）
+    function buildWipHeatmapDirect(sheet) {
       const container = document.getElementById('heatmap-container');
       if (!container) return;
 
-      let cols = sheet.columns.slice(1);
+      let cols = sheet.columns.slice(1); // 略過第一欄類別
       if (cols.length === 0) {
         container.innerHTML = `<p class="text-sm text-slate-400 py-6 text-center">無可用欄位。</p>`;
         return;
@@ -609,11 +496,13 @@
       sheet.data.forEach(row => {
         let catName = String(row[sheet.columns[0].key] || '未命名').trim();
         
+        // 針對「當前這列」收集所有數值，計算該列專屬的 min 與 max
         let rowValues = [];
         cols.forEach(col => {
           let v = parseNum(row[col.key]);
           if (v > 0) rowValues.push(v);
         });
+
         let rowMin = rowValues.length > 0 ? Math.min(...rowValues) : 0;
         let rowMax = rowValues.length > 0 ? Math.max(...rowValues) : 100;
 
@@ -625,6 +514,7 @@
           
           if (val > 0 && rowMax !== rowMin) {
             let ratio = (val - rowMin) / (rowMax - rowMin);
+            // 色彩漸層：從淺綠 (該列最小值) 到 大紅 (該列最大值)
             let r = Math.round(187 + (252 - 187) * ratio);
             let g = Math.round(247 + (165 - 247) * ratio);
             let b = Math.round(208 + (165 - 208) * ratio);
@@ -761,44 +651,6 @@
       });
       return combined;
     }
-
-    window.exportChartToPNG = function(canvasId, titleText) {
-      const exportArea = document.getElementById(`export-area-${canvasId}`);
-      if (!exportArea) return;
-      const btns = exportArea.querySelectorAll('.export-btn');
-      btns.forEach(b => b.style.display = 'none');
-
-      html2canvas(exportArea, { scale: 2, backgroundColor: '#ffffff' }).then(canvas => {
-        btns.forEach(b => b.style.display = 'block');
-        const link = document.createElement('a');
-        link.download = `${titleText}.png`;
-        link.href = canvas.toDataURL('image/png');
-        link.click();
-      }).catch(err => {
-        btns.forEach(b => b.style.display = 'block');
-        console.error(err);
-      });
-    };
-  </script>
-
-    window.exportChartToPNG = function(canvasId, titleText) {
-      const exportArea = document.getElementById(`export-area-${canvasId}`);
-      if (!exportArea) return;
-      const btns = exportArea.querySelectorAll('.export-btn');
-      btns.forEach(b => b.style.display = 'none');
-
-      html2canvas(exportArea, { scale: 2, backgroundColor: '#ffffff' }).then(canvas => {
-        btns.forEach(b => b.style.display = 'block');
-        const link = document.createElement('a');
-        link.download = `${titleText}.png`;
-        link.href = canvas.toDataURL('image/png');
-        link.click();
-      }).catch(err => {
-        btns.forEach(b => b.style.display = 'block');
-        console.error(err);
-      });
-    };
-
     function drawBarComparisonChart(chartId, rows, titleText, k23, k24, k25, k26, l23, l24, l25, l26, activeMonths) {
       const canvas = document.getElementById(`canvas-${chartId}`);
       if (!canvas) return;
@@ -886,38 +738,46 @@
       XLSX.writeFile(wb, "MFG_Analysis_System.xlsx");
     };
 
-    window.importFromExcel = async function(event) {
-      if (!window.isAuthorizedEditor) { alert("需要管理者權限才能匯入！"); return; }
-      const file = event.target.files[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = async function(e) {
+window.importFromExcel = async function(event) {
+    if (!window.isAuthorizedEditor) { alert("需要管理者權限才能匯入！"); return; }
+    const file = event.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    
+    reader.onload = async function(e) {
         const data = new Uint8Array(e.target.result);
         const workbook = XLSX.read(data, { type: 'array' });
-        const sheetName = workbook.SheetNames[1] || workbook.SheetNames[0]; 
-        const worksheet = workbook.Sheets[sheetName];
-        const json = XLSX.utils.sheet_to_json(worksheet);
         
-        if (json.length > 0) {
-          const keys = Object.keys(json[0]);
-          const columns = keys.map((k, i) => ({ key: i === 0 ? 'category' : 'col_' + i, title: k }));
-          const sheetData = json.map(row => {
-            let rObj = {};
-            keys.forEach((k, i) => { rObj[columns[i].key] = row[k]; });
-            return rObj;
-          });
+        // 走訪 Excel 中的每一個工作表，並對應到 window.appState.sheets
+        workbook.SheetNames.forEach((sheetName, index) => {
+            // 如果系統中的 sheets 陣列還有對應的位子，才進行更新
+            if (index < window.appState.sheets.length) {
+                const worksheet = workbook.Sheets[sheetName];
+                const json = XLSX.utils.sheet_to_json(worksheet);
+                
+                if (json.length > 0) {
+                    const keys = Object.keys(json[0]);
+                    const columns = keys.map((k, i) => ({ key: i === 0 ? 'category' : 'col_' + i, title: k }));
+                    const sheetData = json.map(row => {
+                        let rObj = {};
+                        keys.forEach((k, i) => { rObj[columns[i].key] = row[k]; });
+                        return rObj;
+                    });
 
-          const currentSheet = window.appState.sheets.find(s => s.id === window.appState.currentSheetId) || window.appState.sheets[1];
-          currentSheet.columns = columns;
-          currentSheet.data = sheetData;
-          
-          renderApp();
-          autoSaveToFirebase();
-          alert("Excel 匯入成功，並已同步至 Firebase！");
-        }
-      };
-      reader.readAsArrayBuffer(file);
+                    // 依序寫入對應的工作表 (0對應工作表1, 1對應工作表2, 2對應工作表3...)
+                    window.appState.sheets[index].columns = columns;
+                    window.appState.sheets[index].data = sheetData;
+                }
+            }
+        });
+        
+        renderApp();
+        autoSaveToFirebase();
+        alert("Excel 所有工作表匯入成功，並已同步至 Firebase！");
     };
+    
+    reader.readAsArrayBuffer(file);
+};
 
     window.exportChartToPNG = function(chartId, title) {
       const element = document.getElementById(`export-area-${chartId}`);

@@ -79,9 +79,9 @@
     <div id="charts-container" class="grid grid-cols-1 md:grid-cols-2 gap-6"></div>
   </main>
 
-  <script>
+ <script>
     // ==========================================
-    // 1. Firebase 初始化與資料防護鎖
+    // 1. Firebase 初始化與強固型資料庫連線
     // ==========================================
     const firebaseConfig = {
       apiKey: "AIzaSyB7Oss_eMXO4i4PBs9ZziiREb4r9Ko6a74",
@@ -94,9 +94,10 @@
       measurementId: "G-0805TLXWJH"
     };
 
-    firebase.initializeApp(firebaseConfig);
+    const app = firebase.initializeApp(firebaseConfig);
     const auth = firebase.auth();
-    const db = firebase.database();
+    // 明確指定 databaseURL 確保連線正確無誤
+    const db = firebase.database(app, "https://mfgoutput03-default-rtdb.firebaseio.com");
 
     const defaultState = {
       currentSheetId: 'sheet_1',
@@ -162,11 +163,13 @@
         window.isAuthorizedEditor = true;
         document.getElementById('auth-modal').classList.add('hidden');
         document.getElementById('user-email-display').textContent = user.email;
+        console.log("Firebase 登入成功：", user.email);
         loadFromFirebase();
       } else {
         window.isAuthorizedEditor = false;
         document.getElementById('auth-modal').classList.remove('hidden');
         document.getElementById('user-email-display').textContent = '未登入';
+        console.log("目前尚未登入 Firebase");
         renderApp();
       }
     });
@@ -186,29 +189,46 @@
       auth.signOut();
     }
 
-    function autoSaveToFirebase() {
-      if (!window.isAuthorizedEditor) return;
-      if (!isDataLoadedFromCloud && window.appState.sheets[0].data.length === 0) return;
+    // 強制寫入 Firebase 雲端函式
+    function autoSaveToFirebase(callback) {
+      if (!window.isAuthorizedEditor) {
+        console.warn("未授權編輯，無法同步至 Firebase");
+        if (callback) callback(false);
+        return;
+      }
       
       localStorage.setItem('mfg_app_state_cache', JSON.stringify(window.appState));
-      db.ref('mfg_app_state').set(window.appState);
+      
+      db.ref('mfg_app_state').set(window.appState)
+        .then(() => {
+          console.log("【成功】資料已同步寫入 Firebase 雲端！");
+          if (callback) callback(true);
+        })
+        .catch(err => {
+          console.error("【失敗】Firebase 寫入錯誤：", err);
+          alert("Firebase 寫入失敗：" + err.message);
+          if (callback) callback(false);
+        });
     }
 
     function loadFromFirebase() {
       db.ref('mfg_app_state').once('value').then(snapshot => {
         const val = snapshot.val();
-        if (val && val.sheets && val.sheets.length > 0 && val.sheets[0].data.length > 0) {
+        if (val && val.sheets && val.sheets.length > 0) {
           window.appState = val;
           localStorage.setItem('mfg_app_state_cache', JSON.stringify(window.appState));
-        } else if (window.appState.sheets[0].data.length > 0) {
+          console.log("已從 Firebase 雲端載入最新資料");
+        } else {
           db.ref('mfg_app_state').set(window.appState);
+          console.log("雲端無資料，已初始化預設資料至 Firebase");
         }
         isDataLoadedFromCloud = true;
         renderApp();
 
+        // 即時監聽雲端變更
         db.ref('mfg_app_state').on('value', snap => {
           const liveVal = snap.val();
-          if (liveVal && liveVal.sheets && liveVal.sheets.length > 0 && liveVal.sheets[0].data.length > 0) {
+          if (liveVal && liveVal.sheets && liveVal.sheets.length > 0) {
             window.appState = liveVal;
             localStorage.setItem('mfg_app_state_cache', JSON.stringify(window.appState));
             renderApp();
@@ -394,7 +414,7 @@
     };
 
     // ==========================================
-    // 3. Excel 匯入與匯出功能 (支援 Firebase 雲端保存)
+    // 3. Excel 匯入與匯出功能 (強固型雲端同步)
     // ==========================================
     window.exportToExcel = function() {
       const wb = XLSX.utils.book_new();
@@ -413,9 +433,14 @@
     };
 
     window.importFromExcel = function(event) {
-      if (!window.isAuthorizedEditor) { alert("需要管理者權限！"); return; }
+      if (!window.isAuthorizedEditor) { 
+        alert("需要登入管理者權限才能匯入資料！"); 
+        event.target.value = '';
+        return; 
+      }
       const file = event.target.files[0];
       if (!file) return;
+
       const reader = new FileReader();
       reader.onload = function(e) {
         try {
@@ -462,8 +487,15 @@
             window.appState.sheets = newSheets;
             window.appState.currentSheetId = newSheets[0].id;
             renderApp();
-            autoSaveToFirebase(); // 同步至 Firebase 雲端
-            alert("Excel 匯入成功，並已同步儲存至 Firebase 雲端！");
+            
+            // 強制寫入 Firebase 雲端
+            autoSaveToFirebase((success) => {
+              if (success) {
+                alert("Excel 匯入成功，並已成功同步儲存至 Firebase 雲端！");
+              } else {
+                alert("Excel 本地解析成功，但 Firebase 同步被拒絕，請檢查資料庫規則設定。");
+              }
+            });
           } else {
             alert("匯入的檔案沒有有效資料。");
           }
@@ -484,6 +516,8 @@
       container.innerHTML = '';
       const sheetIndex = window.appState.sheets.findIndex(s => s.id === window.appState.currentSheetId);
       const sheet = window.appState.sheets[sheetIndex];
+
+      if (!sheet) return;
 
       if (sheetIndex === 0) {
         const chartIds = ['sc1', 'sc2', 'sc3', 'sc4', 'sc5', 'sc6', 'sc7', 'sc8'];
@@ -508,7 +542,6 @@
         if (sheet) buildAllEightComparisonCharts(sheet);
 
       } else if (sheetIndex === 1 || sheet.name.includes('WIP') || sheet.name.includes('熱力')) {
-        // 第二個工作表或WIP：熱力圖按類別作月份顏色區分
         const wrapper = document.createElement('div');
         wrapper.className = 'bg-white p-6 rounded-xl shadow-sm border flex flex-col md:col-span-2';
         wrapper.id = `export-area-sheet2-heatmap`;
@@ -552,7 +585,7 @@
       return isNaN(n) ? 0 : n;
     }
 
-    // 依據「每個類別（橫向各月份）」獨立計算極值並上色，實現精準的類別內月份對比
+    // 依據「每個類別（橫向各月份）」獨立計算極值並上色
     function buildWipHeatmapPerRow(sheet) {
       const container = document.getElementById('heatmap-container');
       if (!container) return;
@@ -576,7 +609,6 @@
       sheet.data.forEach(row => {
         let catName = String(row[sheet.columns[0].key] || '未命名').trim();
         
-        // 找出該類別各月份數值，計算該類別的 min 與 max
         let rowValues = [];
         cols.forEach(col => {
           let v = parseNum(row[col.key]);
@@ -593,7 +625,6 @@
           
           if (val > 0 && rowMax !== rowMin) {
             let ratio = (val - rowMin) / (rowMax - rowMin);
-            // 色彩漸層：從淺綠 (數值小) 到 大紅 (數值大)
             let r = Math.round(187 + (252 - 187) * ratio);
             let g = Math.round(247 + (165 - 247) * ratio);
             let b = Math.round(208 + (165 - 208) * ratio);
@@ -730,6 +761,25 @@
       });
       return combined;
     }
+
+    window.exportChartToPNG = function(canvasId, titleText) {
+      const exportArea = document.getElementById(`export-area-${canvasId}`);
+      if (!exportArea) return;
+      const btns = exportArea.querySelectorAll('.export-btn');
+      btns.forEach(b => b.style.display = 'none');
+
+      html2canvas(exportArea, { scale: 2, backgroundColor: '#ffffff' }).then(canvas => {
+        btns.forEach(b => b.style.display = 'block');
+        const link = document.createElement('a');
+        link.download = `${titleText}.png`;
+        link.href = canvas.toDataURL('image/png');
+        link.click();
+      }).catch(err => {
+        btns.forEach(b => b.style.display = 'block');
+        console.error(err);
+      });
+    };
+  </script>
 
     window.exportChartToPNG = function(canvasId, titleText) {
       const exportArea = document.getElementById(`export-area-${canvasId}`);

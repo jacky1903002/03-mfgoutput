@@ -476,7 +476,7 @@
       return isNaN(n) ? 0 : n;
     }
 
-    function buildWipHeatmapDirect(sheet) {
+function buildWipHeatmapDirect(sheet) {
       const container = document.getElementById('heatmap-container');
       if (!container) return;
 
@@ -500,7 +500,8 @@
         let catName = String(row[sheet.columns[0].key] || '未命名').trim();
         let rowValues = [];
         cols.forEach(col => {
-          let v = parseNum(row[col.key]);
+          // 加上 Math.round 進行四捨五入取整數
+          let v = Math.round(parseNum(row[col.key]));
           if (v > 0) rowValues.push(v);
         });
 
@@ -510,7 +511,8 @@
         html += `<tr class="hover:bg-slate-50/50"><td class="px-4 py-3 font-medium text-slate-700 border-r bg-slate-50/30">${catName}</td>`;
         
         cols.forEach(col => {
-          let val = parseNum(row[col.key]);
+          // 同樣對每個儲存格數值進行四捨五入
+          let val = Math.round(parseNum(row[col.key]));
           let bgStyle = 'background-color: transparent;';
           
           if (val > 0 && rowMax !== rowMin) {

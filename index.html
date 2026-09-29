@@ -83,27 +83,39 @@
     // ==========================================
     // 1. Firebase 初始化與資料防護鎖
     // ==========================================
-// Import the functions you need from the SDKs you need
-import { initializeApp } from "firebase/app";
-import { getAnalytics } from "firebase/analytics";
-// TODO: Add SDKs for Firebase products that you want to use
-// https://firebase.google.com/docs/web/setup#available-libraries
+<script>
+  // Firebase 設定
+  const firebaseConfig = {
+    apiKey: "AIzaSyDnJaCiYw7RdMsVIoDCWGutWP4crMfwX8k",
+    authDomain: "mfgoutput03-372cc.firebaseapp.com",
+    projectId: "mfgoutput03-372cc",
+    storageBucket: "mfgoutput03-372cc.firebasestorage.app",
+    messagingSenderId: "54967690563",
+    appId: "1:54967690563:web:e2679e5d39891977acbbf6",
+    measurementId: "G-ZFTQT9M7F3"
+  };
 
-// Your web app's Firebase configuration
-// For Firebase JS SDK v7.20.0 and later, measurementId is optional
-const firebaseConfig = {
-  apiKey: "AIzaSyDnJaCiYw7RdMsVIoDCWGutWP4crMfwX8k",
-  authDomain: "mfgoutput03-372cc.firebaseapp.com",
-  projectId: "mfgoutput03-372cc",
-  storageBucket: "mfgoutput03-372cc.firebasestorage.app",
-  messagingSenderId: "54967690563",
-  appId: "1:54967690563:web:e2679e5d39891977acbbf6",
-  measurementId: "G-ZFTQT9M7F3"
-};
+  // 初始化 Firebase
+  firebase.initializeApp(firebaseConfig);
+  const auth = firebase.auth();
 
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
-const analytics = getAnalytics(app);
+  // 登入處理函式（綁定到您的登入按鈕）
+  window.handleLogin = function() {
+    const email = document.getElementById('n1693131@gmail.com').value; // 請對應您輸入信箱的 input ID
+    const password = document.getElementById('Breakheart1a').value; // 請對應輸入密碼的 input ID
+
+    auth.signInWithEmailAndPassword(email, password)
+      .then((userCredential) => {
+        // 登入成功
+        alert("登入成功！");
+        // 這裡可以寫登入成功後的畫面切換邏輯
+      })
+      .catch((error) => {
+        // 登入失敗
+        alert("登入失敗：" + error.message);
+      });
+  };
+</script>
 
     const defaultState = {
       currentSheetId: 'sheet_1',

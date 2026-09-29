@@ -394,9 +394,92 @@
     };
 
     // ==========================================
-    // 3. 圖表與熱力表引擎
+    // 3. Excel 匯入與匯出功能 (支援 Firebase 雲端保存)
     // ==========================================
-    function renderCharts() {
+    window.exportToExcel = function() {
+      const wb = XLSX.utils.book_new();
+      window.appState.sheets.forEach(sheet => {
+        let wsData = [];
+        let headers = sheet.columns.map(c => c.title);
+        wsData.push(headers);
+        sheet.data.forEach(row => {
+          let rArr = sheet.columns.map(c => row[c.key] !== undefined ? row[c.key] : '');
+          wsData.push(rArr);
+        });
+        const ws = XLSX.utils.aoa_to_sheet(wsData);
+        XLSX.utils.book_append_sheet(wb, ws, sheet.name);
+      });
+      XLSX.writeFile(wb, "MFG_Analysis_Export.xlsx");
+    };
+
+    window.importFromExcel = function(event) {
+      if (!window.isAuthorizedEditor) { alert("需要管理者權限！"); return; }
+      const file = event.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        try {
+          const data = new Uint8Array(e.target.result);
+          const workbook = XLSX.read(data, { type: 'array' });
+          let newSheets = [];
+
+          workbook.SheetNames.forEach((sheetName, sIdx) => {
+            const worksheet = workbook.Sheets[sheetName];
+            const json = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+            if (json.length === 0) return;
+
+            let headerRow = json[0] || [];
+            let columns = [];
+            headerRow.forEach((hName, hIdx) => {
+              let key = (hIdx === 0) ? 'category' : 'col_' + hIdx + '_' + Date.now();
+              columns.push({ key: key, title: String(hName || `欄位${hIdx+1}`) });
+            });
+
+            if (columns.length === 0) {
+              columns = [{ key: 'category', title: '類別' }, { key: 'm1', title: '數值' }];
+            }
+
+            let rowsData = [];
+            for (let i = 1; i < json.length; i++) {
+              let rVal = json[i];
+              if (!rVal || rVal.length === 0) continue;
+              let rowObj = {};
+              columns.forEach((col, cIdx) => {
+                rowObj[col.key] = rVal[cIdx] !== undefined ? rVal[cIdx] : (cIdx === 0 ? '類別' + i : 0);
+              });
+              rowsData.push(rowObj);
+            }
+
+            newSheets.push({
+              id: 'sheet_imported_' + sIdx + '_' + Date.now(),
+              name: sheetName,
+              columns: columns,
+              data: rowsData
+            });
+          });
+
+          if (newSheets.length > 0) {
+            window.appState.sheets = newSheets;
+            window.appState.currentSheetId = newSheets[0].id;
+            renderApp();
+            autoSaveToFirebase(); // 同步至 Firebase 雲端
+            alert("Excel 匯入成功，並已同步儲存至 Firebase 雲端！");
+          } else {
+            alert("匯入的檔案沒有有效資料。");
+          }
+        } catch (err) {
+          console.error(err);
+          alert("解析 Excel 失敗：" + err.message);
+        }
+        event.target.value = '';
+      };
+      reader.readAsArrayBuffer(file);
+    };
+
+    // ==========================================
+    // 4. 圖表與熱力表引擎 (支援按類別作月份顏色區分)
+    // ==========================================
+    window.renderCharts = function() {
       const container = document.getElementById('charts-container');
       container.innerHTML = '';
       const sheetIndex = window.appState.sheets.findIndex(s => s.id === window.appState.currentSheetId);
@@ -424,26 +507,26 @@
 
         if (sheet) buildAllEightComparisonCharts(sheet);
 
-      } else if (sheetIndex === 1) {
-        // 第二個工作表：線上WIP 熱力圖（超明顯對比：大紅、小綠）
+      } else if (sheetIndex === 1 || sheet.name.includes('WIP') || sheet.name.includes('熱力')) {
+        // 第二個工作表或WIP：熱力圖按類別作月份顏色區分
         const wrapper = document.createElement('div');
         wrapper.className = 'bg-white p-6 rounded-xl shadow-sm border flex flex-col md:col-span-2';
         wrapper.id = `export-area-sheet2-heatmap`;
         wrapper.innerHTML = `
           <div class="flex justify-between items-center mb-4">
             <div>
-              <h3 class="font-bold text-slate-800 text-lg">線上WIP - 熱力圖分析</h3>
-              <p class="text-xs text-slate-500 mt-0.5">數值越大越紅、越小越淺綠，超明顯對比呈現</p>
+              <h3 class="font-bold text-slate-800 text-lg">${sheet.name} - 熱力圖分析</h3>
+              <p class="text-xs text-slate-500 mt-0.5">每個類別各月份數值獨立比較：數值越大越紅、越小越淺綠</p>
             </div>
-            <button onclick="window.exportChartToPNG('sheet2-heatmap', 'WIP熱力圖')" class="export-btn text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 px-3 py-1.5 rounded transition">匯出圖片</button>
+            <button onclick="window.exportChartToPNG('sheet2-heatmap', '${sheet.name}熱力圖')" class="export-btn text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 px-3 py-1.5 rounded transition">匯出圖片</button>
           </div>
           <div id="heatmap-container" class="overflow-x-auto w-full"></div>
         `;
         container.appendChild(wrapper);
 
-        buildWipHeatmapDirect(sheet);
+        buildWipHeatmapPerRow(sheet);
 
-      } else if (sheetIndex === 2) {
+      } else {
         const wrapper = document.createElement('div');
         wrapper.className = 'bg-white p-5 rounded-xl shadow-sm border flex flex-col md:col-span-2';
         wrapper.id = `export-area-sheet3`;
@@ -469,28 +552,16 @@
       return isNaN(n) ? 0 : n;
     }
 
-    // 建立線上WIP直接熱力圖（超明顯對比：大紅、小綠）
-    function buildWipHeatmapDirect(sheet) {
+    // 依據「每個類別（橫向各月份）」獨立計算極值並上色，實現精準的類別內月份對比
+    function buildWipHeatmapPerRow(sheet) {
       const container = document.getElementById('heatmap-container');
       if (!container) return;
 
-      let cols = sheet.columns.slice(1); // 略過第一欄類別
+      let cols = sheet.columns.slice(1);
       if (cols.length === 0) {
         container.innerHTML = `<p class="text-sm text-slate-400 py-6 text-center">無可用欄位。</p>`;
         return;
       }
-
-      // 收集所有數值以計算全域最大與最小值
-      let allValues = [];
-      sheet.data.forEach(row => {
-        cols.forEach(col => {
-          let v = parseNum(row[col.key]);
-          if (v > 0) allValues.push(v);
-        });
-      });
-
-      let minVal = allValues.length > 0 ? Math.min(...allValues) : 0;
-      let maxVal = allValues.length > 0 ? Math.max(...allValues) : 100;
 
       let html = `<table class="w-full text-left border-collapse text-sm">
         <thead>
@@ -504,16 +575,25 @@
 
       sheet.data.forEach(row => {
         let catName = String(row[sheet.columns[0].key] || '未命名').trim();
+        
+        // 找出該類別各月份數值，計算該類別的 min 與 max
+        let rowValues = [];
+        cols.forEach(col => {
+          let v = parseNum(row[col.key]);
+          if (v > 0) rowValues.push(v);
+        });
+        let rowMin = rowValues.length > 0 ? Math.min(...rowValues) : 0;
+        let rowMax = rowValues.length > 0 ? Math.max(...rowValues) : 100;
+
         html += `<tr class="hover:bg-slate-50/50"><td class="px-4 py-3 font-medium text-slate-700 border-r bg-slate-50/30">${catName}</td>`;
         
         cols.forEach(col => {
           let val = parseNum(row[col.key]);
           let bgStyle = 'background-color: transparent;';
           
-          if (val > 0 && maxVal !== minVal) {
-            let ratio = (val - minVal) / (maxVal - minVal);
+          if (val > 0 && rowMax !== rowMin) {
+            let ratio = (val - rowMin) / (rowMax - rowMin);
             // 色彩漸層：從淺綠 (數值小) 到 大紅 (數值大)
-            // 淺綠: rgb(187, 247, 208), 大紅: rgb(252, 165, 165)
             let r = Math.round(187 + (252 - 187) * ratio);
             let g = Math.round(247 + (165 - 247) * ratio);
             let b = Math.round(208 + (165 - 208) * ratio);
@@ -650,6 +730,24 @@
       });
       return combined;
     }
+
+    window.exportChartToPNG = function(canvasId, titleText) {
+      const exportArea = document.getElementById(`export-area-${canvasId}`);
+      if (!exportArea) return;
+      const btns = exportArea.querySelectorAll('.export-btn');
+      btns.forEach(b => b.style.display = 'none');
+
+      html2canvas(exportArea, { scale: 2, backgroundColor: '#ffffff' }).then(canvas => {
+        btns.forEach(b => b.style.display = 'block');
+        const link = document.createElement('a');
+        link.download = `${titleText}.png`;
+        link.href = canvas.toDataURL('image/png');
+        link.click();
+      }).catch(err => {
+        btns.forEach(b => b.style.display = 'block');
+        console.error(err);
+      });
+    };
 
     function drawBarComparisonChart(chartId, rows, titleText, k23, k24, k25, k26, l23, l24, l25, l26, activeMonths) {
       const canvas = document.getElementById(`canvas-${chartId}`);

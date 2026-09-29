@@ -807,22 +807,34 @@
         alert("匯出圖片失敗：" + err.message);
       });
     };
-  </script>
+<script>
+    // 確保 parseNum 存在，避免非數字或帶逗號字串導致計算錯誤
+    function parseNum(val) {
+      if (val === undefined || val === null || val === '') return 0;
+      const num = parseFloat(String(val).replace(/,/g, ''));
+      return isNaN(num) ? 0 : num;
+    }
+
     function drawCumulativeLineChart(chartId, rows, titleText, k23, k24, k25, k26, l23, l24, l25, l26, activeMonths) {
       const canvas = document.getElementById(`canvas-${chartId}`);
       if (!canvas) return;
-      if (window.chartInstances[chartId]) window.chartInstances[chartId].destroy();
+      if (!activeMonths || activeMonths.length === 0) return;
+      if (window.chartInstances && window.chartInstances[chartId]) {
+        window.chartInstances[chartId].destroy();
+      }
+      if (!window.chartInstances) window.chartInstances = {};
 
       let s23 = 0, s24 = 0, s25 = 0, s26 = 0;
-      const data23 = activeMonths.map((_, i) => { s23 += parseNum(rows[i]?.[k23]); return s23; });
-      const data24 = activeMonths.map((_, i) => { s24 += parseNum(rows[i]?.[k24]); return s24; });
-      const data25 = activeMonths.map((_, i) => { s25 += parseNum(rows[i]?.[k25]); return s25; });
-      const data26 = activeMonths.map((_, i) => { s26 += parseNum(rows[i]?.[k26]); return s26; });
+      const safeRows = rows || [];
+      const data23 = activeMonths.map((_, i) => { s23 += parseNum(safeRows[i]?.[k23]); return s23; });
+      const data24 = activeMonths.map((_, i) => { s24 += parseNum(safeRows[i]?.[k24]); return s24; });
+      const data25 = activeMonths.map((_, i) => { s25 += parseNum(safeRows[i]?.[k25]); return s25; });
+      const data26 = activeMonths.map((_, i) => { s26 += parseNum(safeRows[i]?.[k26]); return s26; });
 
       const totals = [{ year: l23, val: s23 }, { year: l24, val: s24 }, { year: l25, val: s25 }, { year: l26, val: s26 }];
       totals.sort((a, b) => b.val - a.val);
 
-      const yoyVal = s25 > 0 ? ((s26 - s25) / s25 * 100).toFixed(1) : 0;
+      const yoyVal = s25 > 0 ? ((s26 - s25) / s25 * 100).toFixed(1) : '0.0';
       const titleEl = document.getElementById(`title-${chartId}`);
       if (titleEl) {
         titleEl.innerHTML = `${titleText} &nbsp;|&nbsp; <span class="text-xs text-blue-600 font-bold">Top1:${totals[0].year}</span> <span class="text-xs text-slate-500">(YoY: ${yoyVal}%)</span>`;
@@ -853,11 +865,15 @@
     }
 
     window.exportToExcel = function() {
+      if (!window.appState || !window.appState.sheets) {
+        alert("沒有可匯出的資料狀態！");
+        return;
+      }
       const wb = XLSX.utils.book_new();
       window.appState.sheets.forEach(sheet => {
-        const exportData = sheet.data.map(row => {
+        const exportData = (sheet.data || []).map(row => {
           let obj = {};
-          sheet.columns.forEach(col => { obj[col.title] = row[col.key]; });
+          (sheet.columns || []).forEach(col => { obj[col.title] = row[col.key]; });
           return obj;
         });
         const ws = XLSX.utils.json_to_sheet(exportData);
@@ -872,28 +888,38 @@
       if (!file) return;
       const reader = new FileReader();
       reader.onload = async function(e) {
-        const data = new Uint8Array(e.target.result);
-        const workbook = XLSX.read(data, { type: 'array' });
-        const sheetName = workbook.SheetNames[1] || workbook.SheetNames[0]; 
-        const worksheet = workbook.Sheets[sheetName];
-        const json = XLSX.utils.sheet_to_json(worksheet);
-        
-        if (json.length > 0) {
-          const keys = Object.keys(json[0]);
-          const columns = keys.map((k, i) => ({ key: i === 0 ? 'category' : 'col_' + i, title: k }));
-          const sheetData = json.map(row => {
-            let rObj = {};
-            keys.forEach((k, i) => { rObj[columns[i].key] = row[k]; });
-            return rObj;
-          });
-
-          const currentSheet = window.appState.sheets.find(s => s.id === window.appState.currentSheetId) || window.appState.sheets[1];
-          currentSheet.columns = columns;
-          currentSheet.data = sheetData;
+        try {
+          const data = new Uint8Array(e.target.result);
+          const workbook = XLSX.read(data, { type: 'array' });
+          const sheetName = workbook.SheetNames[1] || workbook.SheetNames[0]; 
+          const worksheet = workbook.Sheets[sheetName];
+          const json = XLSX.utils.sheet_to_json(worksheet);
           
-          renderApp();
-          autoSaveToFirebase();
-          alert("Excel 匯入成功，並已同步至 Firebase！");
+          if (json.length > 0) {
+            const keys = Object.keys(json[0]);
+            const columns = keys.map((k, i) => ({ key: i === 0 ? 'category' : 'col_' + i, title: k }));
+            const sheetData = json.map(row => {
+              let rObj = {};
+              keys.forEach((k, i) => { rObj[columns[i].key] = row[k]; });
+              return rObj;
+            });
+
+            if (!window.appState) window.appState = { sheets: [] };
+            const currentSheet = window.appState.sheets.find(s => s.id === window.appState.currentSheetId) || window.appState.sheets[1] || window.appState.sheets[0];
+            if (currentSheet) {
+              currentSheet.columns = columns;
+              currentSheet.data = sheetData;
+            }
+            
+            if (typeof renderApp === 'function') renderApp();
+            if (typeof autoSaveToFirebase === 'function') autoSaveToFirebase();
+            alert("Excel 匯入成功，並已同步至 Firebase！");
+          } else {
+            alert("匯入的 Excel 檔案沒有資料！");
+          }
+        } catch (err) {
+          console.error(err);
+          alert("解析 Excel 檔案失敗，請確認檔案格式是否正確。");
         }
       };
       reader.readAsArrayBuffer(file);
@@ -913,10 +939,11 @@
       }).then(canvas => {
         if (btn) btn.style.display = '';
         const link = document.createElement('a');
-        link.download = `${title}.png`;
+        link.download = `${title || 'chart'}.png`;
         link.href = canvas.toDataURL('image/png', 1.0);
         link.click();
-      }).catch(() => {
+      }).catch((err) => {
+        console.error(err);
         if (btn) btn.style.display = '';
         alert("匯出圖片失敗！");
       });

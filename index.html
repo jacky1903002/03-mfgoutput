@@ -523,15 +523,20 @@ function buildWipHeatmapDirect(sheet) {
           
           if (val > 0 && rowMax !== rowMin) {
             let ratio = (val - rowMin) / (rowMax - rowMin);
-            let r = Math.round(187 + (252 - 187) * ratio);
-            let g = Math.round(247 + (165 - 247) * ratio);
-            let b = Math.round(208 + (165 - 208) * ratio);
+            let r = Math.round(187 + (239 - 187) * ratio);
+            let g = Math.round(247 + (68 - 247) * ratio);
+            let b = Math.round(208 + (68 - 208) * ratio);
             bgStyle = `background-color: rgb(${r}, ${g}, ${b});`;
+// 數值高時背景偏紅，字體自動轉為白色以維持極佳的可讀性
+            if (ratio > 0.5) {
+              textColor = 'color: #ffffff;';
+            }
           } else if (val > 0) {
-            bgStyle = `background-color: rgb(252, 165, 165);`;
+            bgStyle = `background-color: rgb(239, 68, 68);`;
+            textColor = 'color: #ffffff;';
           }
 
-          html += `<td class="px-4 py-3 text-center font-semibold" style="${bgStyle}">${val > 0 ? val.toLocaleString() : '-'}</td>`;
+          html += `<td class="px-4 py-3 text-center font-semibold" style="${bgStyle} ${textColor}">${val > 0 ? val.toLocaleString() : '-'}</td>`;
         });
         html += `</tr>`;
       });

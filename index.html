@@ -425,51 +425,7 @@
         if (sheet) buildAllEightComparisonCharts(sheet);
 
       } else if (sheetIndex === 1) {
-        // 第二個工作表：線上WIP 熱力圖（超明顯對比：大紅、小綠）
-        const wrapper = document.createElement('div');
-        wrapper.className = 'bg-white p-6 rounded-xl shadow-sm border flex flex-col md:col-span-2';
-        wrapper.id = `export-area-sheet2-heatmap`;
-        wrapper.innerHTML = `
-          <div class="flex justify-between items-center mb-4">
-            <div>
-              <h3 class="font-bold text-slate-800 text-lg">線上WIP - 熱力圖分析</h3>
-              <p class="text-xs text-slate-500 mt-0.5">數值越大越紅、越小越淺綠，超明顯對比呈現</p>
-            </div>
-            <button onclick="window.exportChartToPNG('sheet2-heatmap', 'WIP熱力圖')" class="export-btn text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 px-3 py-1.5 rounded transition">匯出圖片</button>
-          </div>
-          <div id="heatmap-container" class="overflow-x-auto w-full"></div>
-        `;
-        container.appendChild(wrapper);
-
-        buildWipHeatmapDirect(sheet);
-
-      } else if (sheetIndex === 2) {
-        const wrapper = document.createElement('div');
-        wrapper.className = 'bg-white p-5 rounded-xl shadow-sm border flex flex-col md:col-span-2';
-        wrapper.id = `export-area-sheet3`;
-        wrapper.innerHTML = `
-          <div class="flex justify-between items-center mb-4">
-            <h3 class="font-semibold text-slate-700 text-base">${sheet.name} - 趨勢圖</h3>
-            <button onclick="window.exportChartToPNG('sheet3', '${sheet.name}')" class="export-btn text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 px-2.5 py-1 rounded transition">匯出圖片</button>
-          </div>
-          <div class="relative h-96 w-full">
-            <canvas id="canvas-sheet3"></canvas>
-          </div>
-        `;
-        container.appendChild(wrapper);
-
-        buildWideTableLineChart(sheet);
-      }
-    }
-
-    function parseNum(val) {
-      if (val === undefined || val === null || val === '') return 0;
-      let s = String(val).replace(/[^0-9.-]/g, '');
-      let n = parseFloat(s);
-      return isNaN(n) ? 0 : n;
-    }
-
-    // 建立線上WIP直接熱力圖（超明顯對比：大紅、小綠）
+     // 建立線上WIP直接熱力圖（依各類別（列）各自獨立計算高低對比）
     function buildWipHeatmapDirect(sheet) {
       const container = document.getElementById('heatmap-container');
       if (!container) return;
@@ -479,18 +435,6 @@
         container.innerHTML = `<p class="text-sm text-slate-400 py-6 text-center">無可用欄位。</p>`;
         return;
       }
-
-      // 收集所有數值以計算全域最大與最小值
-      let allValues = [];
-      sheet.data.forEach(row => {
-        cols.forEach(col => {
-          let v = parseNum(row[col.key]);
-          if (v > 0) allValues.push(v);
-        });
-      });
-
-      let minVal = allValues.length > 0 ? Math.min(...allValues) : 0;
-      let maxVal = allValues.length > 0 ? Math.max(...allValues) : 100;
 
       let html = `<table class="w-full text-left border-collapse text-sm">
         <thead>
@@ -504,15 +448,27 @@
 
       sheet.data.forEach(row => {
         let catName = String(row[sheet.columns[0].key] || '未命名').trim();
+        
+        // 1. 【關鍵修改】針對「當前這列」收集所有月份的有效數值，計算該列專屬的 min 與 max
+        let rowValues = [];
+        cols.forEach(col => {
+          let v = parseNum(row[col.key]);
+          if (v > 0) rowValues.push(v);
+        });
+
+        let rowMin = rowValues.length > 0 ? Math.min(...rowValues) : 0;
+        let rowMax = rowValues.length > 0 ? Math.max(...rowValues) : 100;
+
         html += `<tr class="hover:bg-slate-50/50"><td class="px-4 py-3 font-medium text-slate-700 border-r bg-slate-50/30">${catName}</td>`;
         
         cols.forEach(col => {
           let val = parseNum(row[col.key]);
           let bgStyle = 'background-color: transparent;';
           
-          if (val > 0 && maxVal !== minVal) {
-            let ratio = (val - minVal) / (maxVal - minVal);
-            // 色彩漸層：從淺綠 (數值小) 到 大紅 (數值大)
+          // 2. 【關鍵修改】使用該列的 rowMin 與 rowMax 來計算比例與顏色深淺
+          if (val > 0 && rowMax !== rowMin) {
+            let ratio = (val - rowMin) / (rowMax - rowMin);
+            // 色彩漸層：從淺綠 (該列最小值) 到 大紅 (該列最大值)
             // 淺綠: rgb(187, 247, 208), 大紅: rgb(252, 165, 165)
             let r = Math.round(187 + (252 - 187) * ratio);
             let g = Math.round(247 + (165 - 247) * ratio);

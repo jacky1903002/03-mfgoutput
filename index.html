@@ -95,33 +95,48 @@
   firebase.initializeApp(firebaseConfig);
   const auth = firebase.auth();
 
-  // 登入處理函式（綁定到您的登入按鈕）
-  window.handleLogin = function() {
-    // 假設您網頁上的輸入框 ID 分別叫做 'login-email' 與 'login-password'
-    // 請根據您 HTML 實際寫的 id 進行調整
-    const emailInput = document.getElementById('login-email');
-    const passwordInput = document.getElementById('login-password');
+window.handleLogin = function() {
+    // 直接選取「系統登入」對話框裡面的 input 欄位
+    // 第 1 個 input 通常是電子郵件，第 2 個是密碼
+    const inputs = document.querySelectorAll('#system-login input, .login-modal input, input[type="email"], input[type="password"]');
+    
+    // 如果直接抓不到特定範圍，就抓頁面上所有的 input
+    const allInputs = inputs.length > 0 ? inputs : document.querySelectorAll('input');
+    
+    let email = '';
+    let password = '';
 
-    // 檢查輸入框是否存在，避免報錯
-    if (!emailInput || !passwordInput) {
-      alert("找不到登入的輸入框元素，請檢查 HTML 的 ID 設定！");
-      return;
+    // 自動判斷哪個是信箱、哪個是密碼
+    allInputs.forEach(input => {
+        if (input.type === 'email' || input.value.includes('@') || input.id.includes('email') || input.placeholder?.includes('郵件')) {
+            email = input.value;
+        } else if (input.type === 'password' || input.id.includes('password') || input.placeholder?.includes('密碼')) {
+            password = input.value;
+        }
+    });
+
+    // 如果上面自動對應失敗，直接用順序抓取（畫面上有兩個輸入框時最保險）
+    if ((!email || !password) && allInputs.length >= 2) {
+        email = allInputs[0].value;
+        password = allInputs[1].value;
     }
 
-    const email = emailInput.value;
-    const password = passwordInput.value;
+    if (!email || !password) {
+        alert("請輸入電子郵件與密碼！");
+        return;
+    }
 
+    // 執行 Firebase 登入
     auth.signInWithEmailAndPassword(email, password)
       .then((userCredential) => {
-        // 登入成功
         alert("登入成功！");
-        // 這裡可以加上登入成功後的畫面切換或重新渲染邏輯
+        // 登入成功後可以在這裡加上關閉視窗或重新整理的邏輯
+        location.reload();
       })
       .catch((error) => {
-        // 登入失敗
         alert("登入失敗：" + error.message);
       });
-  };
+};
 </script>
     auth.signInWithEmailAndPassword(email, password)
       .then((userCredential) => {

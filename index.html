@@ -188,19 +188,21 @@
 
     function autoSaveToFirebase() {
       if (!window.isAuthorizedEditor) return;
-      if (!isDataLoadedFromCloud && window.appState.sheets[0].data.length === 0) return;
       
+      // 確保將最新狀態寫入 localStorage 與 Firebase
       localStorage.setItem('mfg_app_state_cache', JSON.stringify(window.appState));
-      db.ref('mfg_app_state').set(window.appState);
+      db.ref('mfg_app_state').set(window.appState).catch(err => {
+        console.error("同步至 Firebase 失敗:", err);
+      });
     }
 
     function loadFromFirebase() {
       db.ref('mfg_app_state').once('value').then(snapshot => {
         const val = snapshot.val();
-        if (val && val.sheets && val.sheets.length > 0 && val.sheets[0].data.length > 0) {
+        if (val && val.sheets && val.sheets.length > 0) {
           window.appState = val;
           localStorage.setItem('mfg_app_state_cache', JSON.stringify(window.appState));
-        } else if (window.appState.sheets[0].data.length > 0) {
+        } else {
           db.ref('mfg_app_state').set(window.appState);
         }
         isDataLoadedFromCloud = true;
@@ -208,7 +210,8 @@
 
         db.ref('mfg_app_state').on('value', snap => {
           const liveVal = snap.val();
-          if (liveVal && liveVal.sheets && liveVal.sheets.length > 0 && liveVal.sheets[0].data.length > 0) {
+          if (liveVal && liveVal.sheets && liveVal.sheets.length > 0) {
+            // 只有在非本地編輯同步時才更新，或直接同步
             window.appState = liveVal;
             localStorage.setItem('mfg_app_state_cache', JSON.stringify(window.appState));
             renderApp();
@@ -425,7 +428,7 @@
         if (sheet) buildAllEightComparisonCharts(sheet);
 
       } else if (sheetIndex === 1) {
-        // 第二個工作表：線上WIP 熱力圖（超明顯對比：大紅、小綠）
+        // 第二個工作表：線上WIP 熱力圖（獨立各列對比：大紅、小綠）
         const wrapper = document.createElement('div');
         wrapper.className = 'bg-white p-6 rounded-xl shadow-sm border flex flex-col md:col-span-2';
         wrapper.id = `export-area-sheet2-heatmap`;
@@ -433,7 +436,7 @@
           <div class="flex justify-between items-center mb-4">
             <div>
               <h3 class="font-bold text-slate-800 text-lg">線上WIP - 熱力圖分析</h3>
-              <p class="text-xs text-slate-500 mt-0.5">數值越大越紅、越小越淺綠，超明顯對比呈現</p>
+              <p class="text-xs text-slate-500 mt-0.5">依各部門(列)各自獨立呈現大紅小綠對比</p>
             </div>
             <button onclick="window.exportChartToPNG('sheet2-heatmap', 'WIP熱力圖')" class="export-btn text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 px-3 py-1.5 rounded transition">匯出圖片</button>
           </div>
@@ -469,7 +472,7 @@
       return isNaN(n) ? 0 : n;
     }
 
-    // 建立線上WIP直接熱力圖（超明顯對比：大紅、小綠）
+    // 建立線上WIP直接熱力圖（依各類別各自獨立計算高低對比）
     function buildWipHeatmapDirect(sheet) {
       const container = document.getElementById('heatmap-container');
       if (!container) return;
@@ -479,18 +482,6 @@
         container.innerHTML = `<p class="text-sm text-slate-400 py-6 text-center">無可用欄位。</p>`;
         return;
       }
-
-      // 收集所有數值以計算全域最大與最小值
-      let allValues = [];
-      sheet.data.forEach(row => {
-        cols.forEach(col => {
-          let v = parseNum(row[col.key]);
-          if (v > 0) allValues.push(v);
-        });
-      });
-
-      let minVal = allValues.length > 0 ? Math.min(...allValues) : 0;
-      let maxVal = allValues.length > 0 ? Math.max(...allValues) : 100;
 
       let html = `<table class="w-full text-left border-collapse text-sm">
         <thead>
@@ -504,16 +495,26 @@
 
       sheet.data.forEach(row => {
         let catName = String(row[sheet.columns[0].key] || '未命名').trim();
+        
+        // 針對「當前這列」收集所有數值，計算該列專屬的 min 與 max
+        let rowValues = [];
+        cols.forEach(col => {
+          let v = parseNum(row[col.key]);
+          if (v > 0) rowValues.push(v);
+        });
+
+        let rowMin = rowValues.length > 0 ? Math.min(...rowValues) : 0;
+        let rowMax = rowValues.length > 0 ? Math.max(...rowValues) : 100;
+
         html += `<tr class="hover:bg-slate-50/50"><td class="px-4 py-3 font-medium text-slate-700 border-r bg-slate-50/30">${catName}</td>`;
         
         cols.forEach(col => {
           let val = parseNum(row[col.key]);
           let bgStyle = 'background-color: transparent;';
           
-          if (val > 0 && maxVal !== minVal) {
-            let ratio = (val - minVal) / (maxVal - minVal);
-            // 色彩漸層：從淺綠 (數值小) 到 大紅 (數值大)
-            // 淺綠: rgb(187, 247, 208), 大紅: rgb(252, 165, 165)
+          if (val > 0 && rowMax !== rowMin) {
+            let ratio = (val - rowMin) / (rowMax - rowMin);
+            // 色彩漸層：從淺綠 (該列最小值) 到 大紅 (該列最大值)
             let r = Math.round(187 + (252 - 187) * ratio);
             let g = Math.round(247 + (165 - 247) * ratio);
             let b = Math.round(208 + (165 - 208) * ratio);
@@ -650,7 +651,6 @@
       });
       return combined;
     }
-
     function drawBarComparisonChart(chartId, rows, titleText, k23, k24, k25, k26, l23, l24, l25, l26, activeMonths) {
       const canvas = document.getElementById(`canvas-${chartId}`);
       if (!canvas) return;

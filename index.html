@@ -738,46 +738,38 @@
       XLSX.writeFile(wb, "MFG_Analysis_System.xlsx");
     };
 
-window.importFromExcel = async function(event) {
-    if (!window.isAuthorizedEditor) { alert("需要管理者權限才能匯入！"); return; }
-    const file = event.target.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    
-    reader.onload = async function(e) {
+    window.importFromExcel = async function(event) {
+      if (!window.isAuthorizedEditor) { alert("需要管理者權限才能匯入！"); return; }
+      const file = event.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = async function(e) {
         const data = new Uint8Array(e.target.result);
         const workbook = XLSX.read(data, { type: 'array' });
+        const sheetName = workbook.SheetNames[1] || workbook.SheetNames[0]; 
+        const worksheet = workbook.Sheets[sheetName];
+        const json = XLSX.utils.sheet_to_json(worksheet);
         
-        // 走訪 Excel 中的每一個工作表，並對應到 window.appState.sheets
-        workbook.SheetNames.forEach((sheetName, index) => {
-            // 如果系統中的 sheets 陣列還有對應的位子，才進行更新
-            if (index < window.appState.sheets.length) {
-                const worksheet = workbook.Sheets[sheetName];
-                const json = XLSX.utils.sheet_to_json(worksheet);
-                
-                if (json.length > 0) {
-                    const keys = Object.keys(json[0]);
-                    const columns = keys.map((k, i) => ({ key: i === 0 ? 'category' : 'col_' + i, title: k }));
-                    const sheetData = json.map(row => {
-                        let rObj = {};
-                        keys.forEach((k, i) => { rObj[columns[i].key] = row[k]; });
-                        return rObj;
-                    });
+        if (json.length > 0) {
+          const keys = Object.keys(json[0]);
+          const columns = keys.map((k, i) => ({ key: i === 0 ? 'category' : 'col_' + i, title: k }));
+          const sheetData = json.map(row => {
+            let rObj = {};
+            keys.forEach((k, i) => { rObj[columns[i].key] = row[k]; });
+            return rObj;
+          });
 
-                    // 依序寫入對應的工作表 (0對應工作表1, 1對應工作表2, 2對應工作表3...)
-                    window.appState.sheets[index].columns = columns;
-                    window.appState.sheets[index].data = sheetData;
-                }
-            }
-        });
-        
-        renderApp();
-        autoSaveToFirebase();
-        alert("Excel 所有工作表匯入成功，並已同步至 Firebase！");
+          const currentSheet = window.appState.sheets.find(s => s.id === window.appState.currentSheetId) || window.appState.sheets[1];
+          currentSheet.columns = columns;
+          currentSheet.data = sheetData;
+          
+          renderApp();
+          autoSaveToFirebase();
+          alert("Excel 匯入成功，並已同步至 Firebase！");
+        }
+      };
+      reader.readAsArrayBuffer(file);
     };
-    
-    reader.readAsArrayBuffer(file);
-};
 
     window.exportChartToPNG = function(chartId, title) {
       const element = document.getElementById(`export-area-${chartId}`);

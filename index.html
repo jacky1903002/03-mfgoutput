@@ -194,10 +194,16 @@
       auth.signOut();
     };
 
-    function autoSaveToFirebase() {
+function autoSaveToFirebase() {
       if (!window.isAuthorizedEditor) return;
       localStorage.setItem('mfg_app_state_cache', JSON.stringify(window.appState));
-      db.ref('mfg_app_state').set(window.appState).catch(err => {
+      
+      // 在上傳前清洗資料，避免物件中含有 undefined 導致 Firebase 報錯
+      const sanitizedState = JSON.parse(JSON.stringify(window.appState, (key, value) => {
+        return (value === undefined) ? null : value;
+      }));
+
+      db.ref('mfg_app_state').set(sanitizedState).catch(err => {
         console.error("同步至 Firebase 失敗:", err);
       });
     }

@@ -3,16 +3,23 @@
 <head>
   <meta charset="UTF-8">
   <title>MFG Output & Cost Analysis System</title>
+  
+  <!-- 效能優化：加入 preconnect 加速外部 CDN 資源載入與 DNS 解析 -->
+  <link rel="preconnect" href="https://cdn.tailwindcss.com">
+  <link rel="preconnect" href="https://cdn.jsdelivr.net">
+  <link rel="preconnect" href="https://cdnjs.cloudflare.com">
+  <link rel="preconnect" href="https://www.gstatic.com">
+
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
-  <!-- Chart.js -->
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- Chart.js (加入 defer 加速頁面解析) -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js" defer></script>
   <!-- Chart.js DataLabels Plugin -->
-  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js" defer></script>
   <!-- SheetJS (Excel 匯入匯出) -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
   <!-- html2canvas (圖表匯出 PNG) -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
   <!-- Firebase SDK (相容版本) -->
   <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
@@ -45,12 +52,21 @@
       <h1 class="text-xl font-bold text-slate-800">產值與同期比較&線上即時WIP&複材占比</h1>
       <span id="user-email-display" class="text-sm text-slate-500 bg-slate-100 px-3 py-1 rounded-full">驗證中...</span>
     </div>
-    <div class="flex items-center space-x-3">
-      <button onclick="window.exportToExcel()" class="bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-emerald-700 transition">匯出 Excel</button>
-      <label class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition cursor-pointer">
-        匯入 Excel <input type="file" accept=".xlsx, .xls" class="hidden" onchange="window.importFromExcel(event)">
-      </label>
-      <button onclick="handleLogout()" class="bg-slate-200 text-slate-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-slate-300 transition">登出</button>
+    
+    <div class="flex items-center space-x-4">
+      <!-- 加入的動態時間顯示 Banner -->
+      <div class="update-banner text-xs text-slate-500 flex items-center space-x-1 bg-slate-50 px-3 py-1.5 rounded-lg border">
+        <i class="fa-regular fa-clock"></i>
+        <span>上次更新日期時間：</span><span id="last-update-time-text" class="font-medium text-slate-700">讀取中...</span>
+      </div>
+
+      <div class="flex items-center space-x-3">
+        <button onclick="window.exportToExcel()" class="bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-emerald-700 transition">匯出 Excel</button>
+        <label class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition cursor-pointer">
+          匯入 Excel <input type="file" accept=".xlsx, .xls" class="hidden" onchange="window.importFromExcel(event)">
+        </label>
+        <button onclick="handleLogout()" class="bg-slate-200 text-slate-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-slate-300 transition">登入</button>
+      </div>
     </div>
   </header>
 
@@ -98,6 +114,7 @@
 
     const defaultState = {
       currentSheetId: 'sheet_1',
+      updatedAt: null, // 記錄最後更新時間
       sheets: [
         {
           id: 'sheet_1',
@@ -155,6 +172,27 @@
     window.chartInstances = {};
     let isDataLoadedFromCloud = false;
 
+    // 格式化與更新動態時間顯示函式
+    window.formatDateTime = function(isoString) {
+      if (!isoString) return '尚無更新紀錄';
+      const d = new Date(isoString);
+      if (isNaN(d.getTime())) return isoString;
+      const yr = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      const hr = String(d.getHours()).padStart(2, '0');
+      const min = String(d.getMinutes()).padStart(2, '0');
+      return `${yr}年${m}月${day}日 ${hr}:${min}`;
+    };
+
+    window.updateTimeDisplay = function() {
+      const timeEl = document.getElementById('last-update-time-text');
+      if (timeEl) {
+        // 使用動態抓取的真實時間
+        timeEl.innerText = window.appState.updatedAt ? window.formatDateTime(window.appState.updatedAt) : '尚未記錄';
+      }
+    };
+
     auth.onAuthStateChanged(user => {
       if (user) {
         window.isAuthorizedEditor = true;
@@ -194,11 +232,15 @@
       auth.signOut();
     };
 
-function autoSaveToFirebase() {
+    function autoSaveToFirebase() {
       if (!window.isAuthorizedEditor) return;
+      
+      // 更新時間戳記
+      window.appState.updatedAt = new Date().toISOString();
+      window.updateTimeDisplay();
+
       localStorage.setItem('mfg_app_state_cache', JSON.stringify(window.appState));
       
-      // 在上傳前清洗資料，避免物件中含有 undefined 導致 Firebase 報錯
       const sanitizedState = JSON.parse(JSON.stringify(window.appState, (key, value) => {
         return (value === undefined) ? null : value;
       }));
@@ -215,9 +257,11 @@ function autoSaveToFirebase() {
           window.appState = val;
           localStorage.setItem('mfg_app_state_cache', JSON.stringify(window.appState));
         } else {
+          window.appState.updatedAt = new Date().toISOString();
           db.ref('mfg_app_state').set(window.appState);
         }
         isDataLoadedFromCloud = true;
+        window.updateTimeDisplay();
         renderApp();
 
         db.ref('mfg_app_state').on('value', snap => {
@@ -225,23 +269,24 @@ function autoSaveToFirebase() {
           if (liveVal && liveVal.sheets && liveVal.sheets.length > 0) {
             window.appState = liveVal;
             localStorage.setItem('mfg_app_state_cache', JSON.stringify(window.appState));
+            window.updateTimeDisplay();
             renderApp();
           }
         });
       }).catch(err => {
         console.error("載入 Firebase 失敗:", err);
         isDataLoadedFromCloud = true;
+        window.updateTimeDisplay();
         renderApp();
       });
     }
 
-    // ==========================================
-    // 2. 核心渲染與工作表操作
-    // ==========================================
+    // 核心渲染與工作表操作
     window.renderApp = function() {
       renderSheetsTabs();
       renderTable();
       renderCharts();
+      window.updateTimeDisplay();
     }
 
     function renderSheetsTabs() {
@@ -407,9 +452,7 @@ function autoSaveToFirebase() {
       autoSaveToFirebase();
     };
 
-    // ==========================================
-    // 3. 圖表與熱力表引擎
-    // ==========================================
+    // 圖表與熱力表引擎
     function renderCharts() {
       const container = document.getElementById('charts-container');
       container.innerHTML = '';
@@ -477,12 +520,12 @@ function autoSaveToFirebase() {
 
     function parseNum(val) {
       if (val === undefined || val === null || val === '') return 0;
-      let s = String(val).replace(/[^0-9.-]/g, '');
+      let s = String(val).replace(/,/g, '');
       let n = parseFloat(s);
       return isNaN(n) ? 0 : n;
     }
 
-function buildWipHeatmapDirect(sheet) {
+    function buildWipHeatmapDirect(sheet) {
       const container = document.getElementById('heatmap-container');
       if (!container) return;
 
@@ -506,7 +549,6 @@ function buildWipHeatmapDirect(sheet) {
         let catName = String(row[sheet.columns[0].key] || '未命名').trim();
         let rowValues = [];
         cols.forEach(col => {
-          // 四捨五入取整數計算極值
           let v = Math.round(parseNum(row[col.key]));
           if (v > 0) rowValues.push(v);
         });
@@ -517,7 +559,6 @@ function buildWipHeatmapDirect(sheet) {
         html += `<tr class="hover:bg-slate-50/50"><td class="px-4 py-3 font-medium text-slate-700 border-r bg-slate-50/30">${catName}</td>`;
         
         cols.forEach(col => {
-          // 四捨五入取整數顯示與計算比例
           let val = Math.round(parseNum(row[col.key]));
           let bgStyle = 'background-color: transparent;';
           let textColor = 'color: inherit;';
@@ -545,6 +586,7 @@ function buildWipHeatmapDirect(sheet) {
       html += `</tbody></table>`;
       container.innerHTML = html;
     }
+
     function buildWideTableLineChart(sheet) {
       const canvas = document.getElementById('canvas-sheet3');
       if (!canvas) return;
@@ -692,139 +734,6 @@ function buildWipHeatmapDirect(sheet) {
         options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'top' }, title: { display: false } } },
         plugins: [ChartDataLabels]
       });
-    }
-
-    function drawCumulativeLineChart(chartId, rows, titleText, k23, k24, k25, k26, l23, l24, l25, l26, activeMonths) {
-      const canvas = document.getElementById(`canvas-${chartId}`);
-      if (!canvas) return;
-      if (window.chartInstances[chartId]) window.chartInstances[chartId].destroy();
-
-      let cum23 = 0, cum24 = 0, cum25 = 0, cum26 = 0;
-      let data23 = [], data24 = [], data25 = [], data26 = [];
-
-      activeMonths.forEach((_, i) => {
-        cum23 += parseNum(rows[i]?.[k23]);
-        cum24 += parseNum(rows[i]?.[k24]);
-        cum25 += parseNum(rows[i]?.[k25]);
-        cum26 += parseNum(rows[i]?.[k26]);
-
-        data23.push(cum23);
-        data24.push(cum24);
-        data25.push(cum25);
-        data26.push(cum26);
-      });
-
-      window.chartInstances[chartId] = new Chart(canvas, {
-        type: 'line',
-        data: {
-          labels: activeMonths,
-          datasets: [
-            { label: l23, data: data23, borderColor: '#10b981', backgroundColor: '#10b981', tension: 0.1, datalabels: { display: false } },
-            { label: l24, data: data24, borderColor: '#3b82f6', backgroundColor: '#3b82f6', tension: 0.1, datalabels: { display: false } },
-            { label: l25, data: data25, borderColor: '#f59e0b', backgroundColor: '#f59e0b', tension: 0.1, datalabels: { display: false } },
-            { label: l26, data: data26, borderColor: '#ef4444', backgroundColor: '#ef4444', tension: 0.1, datalabels: { display: false } }
-          ]
-        },
-        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'top' }, title: { display: false } } },
-        plugins: [ChartDataLabels]
-      });
-    }
-
-    // 匯出 Excel 功能
-    window.exportToExcel = function() {
-      const wb = XLSX.utils.book_new();
-      window.appState.sheets.forEach(sheet => {
-        let wsData = [];
-        let header = sheet.columns.map(c => c.title);
-        wsData.push(header);
-        sheet.data.forEach(row => {
-          let r = sheet.columns.map(c => row[c.key] !== undefined ? row[c.key] : '');
-          wsData.push(r);
-        });
-        const ws = XLSX.utils.aoa_to_sheet(wsData);
-        XLSX.utils.book_append_sheet(wb, ws, sheet.name);
-      });
-      XLSX.writeFile(wb, 'MFG_Output_Cost_Analysis.xlsx');
-    };
-
-    // 匯入 Excel 功能
-    window.importFromExcel = function(e) {
-      if (!window.isAuthorizedEditor) { alert("需要管理者權限！"); return; }
-      const file = e.target.files[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = function(evt) {
-        try {
-          const data = new Uint8Array(evt.target.result);
-          const wb = XLSX.read(data, { type: 'array' });
-          let newSheets = [];
-          wb.SheetNames.forEach((sheetName, sIdx) => {
-            const ws = wb.Sheets[sheetName];
-            const json = XLSX.utils.sheet_to_json(ws, { header: 1 });
-            if (json.length === 0) return;
-
-            let headerRow = json[0] || [];
-            let columns = headerRow.map((h, hIdx) => ({
-              key: hIdx === 0 ? 'category' : 'col_' + hIdx + '_' + Date.now(),
-              title: String(h || `欄位${hIdx+1}`)
-            }));
-
-            let rowsData = [];
-            for (let i = 1; i < json.length; i++) {
-              let rValues = json[i];
-              if (!rValues || rValues.length === 0) continue;
-              let rowObj = {};
-              columns.forEach((c, cIdx) => {
-                rowObj[c.key] = rValues[cIdx] !== undefined ? rValues[cIdx] : '';
-              });
-              rowsData.push(rowObj);
-            }
-
-            newSheets.push({
-              id: 'sheet_' + (sIdx + 1) + '_' + Date.now(),
-              name: sheetName,
-              columns: columns.length > 0 ? columns : [{ key: 'category', title: '類別' }],
-              data: rowsData
-            });
-          });
-
-          if (newSheets.length > 0) {
-            window.appState.sheets = newSheets;
-            window.appState.currentSheetId = newSheets[0].id;
-            renderApp();
-            autoSaveToFirebase();
-            alert("Excel 匯入成功！");
-          }
-        } catch (err) {
-          alert("匯入失敗：" + err.message);
-        }
-      };
-      reader.readAsArrayBuffer(file);
-    };
-
-    // 匯出圖表為 PNG
-    window.exportChartToPNG = function(chartId, title) {
-      const element = document.getElementById(`export-area-${chartId}`);
-      if (!element) return;
-      const exportBtn = element.querySelector('.export-btn');
-      if (exportBtn) exportBtn.style.display = 'none';
-
-      html2canvas(element, { scale: 2 }).then(canvas => {
-        if (exportBtn) exportBtn.style.display = 'block';
-        const link = document.createElement('a');
-        link.download = `${title}.png`;
-        link.href = canvas.toDataURL('image/png');
-        link.click();
-      }).catch(err => {
-        if (exportBtn) exportBtn.style.display = 'block';
-        alert("匯出圖片失敗：" + err.message);
-      });
-    };
-    // 確保 parseNum 存在，避免非數字或帶逗號字串導致計算錯誤
-    function parseNum(val) {
-      if (val === undefined || val === null || val === '') return 0;
-      const num = parseFloat(String(val).replace(/,/g, ''));
-      return isNaN(num) ? 0 : num;
     }
 
     function drawCumulativeLineChart(chartId, rows, titleText, k23, k24, k25, k26, l23, l24, l25, l26, activeMonths) {

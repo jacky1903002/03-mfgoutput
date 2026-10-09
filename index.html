@@ -2,9 +2,10 @@
 <html lang="zh-TW">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>MFG Output & Cost Analysis System</title>
   
-  <!-- 效能優化：加入 preconnect 加速外部 CDN 資源載入與 DNS 解析 -->
+  <!-- 效能優化：預先連線外部 CDN 資源 -->
   <link rel="preconnect" href="https://cdn.tailwindcss.com">
   <link rel="preconnect" href="https://cdn.jsdelivr.net">
   <link rel="preconnect" href="https://cdnjs.cloudflare.com">
@@ -12,88 +13,107 @@
 
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
-  <!-- Chart.js (加入 defer 加速頁面解析) -->
+  <!-- Chart.js -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js" defer></script>
   <!-- Chart.js DataLabels Plugin -->
   <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js" defer></script>
-  <!-- SheetJS (Excel 匯入匯出) -->
+  <!-- SheetJS (Excel 匯入/匯出) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
   <!-- html2canvas (圖表匯出 PNG) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
-  <!-- Firebase SDK (相容版本) -->
+  <!-- FontAwesome -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- Firebase SDK (Compat) -->
   <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
 </head>
 <body class="bg-slate-100 text-slate-800 min-h-screen flex flex-col">
 
-  <!-- 登入 Modal -->
-  <div id="auth-modal" class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center">
-    <div class="bg-white p-8 rounded-xl shadow-2xl w-96">
-      <h2 class="text-2xl font-bold mb-6 text-center text-slate-700">系統登入</h2>
+  <!-- 1. 入口全螢幕 Firebase 登入遮罩 -->
+  <div id="auth-modal" class="fixed inset-0 bg-slate-900 z-50 flex items-center justify-center p-4">
+    <div class="bg-white p-8 rounded-2xl shadow-2xl w-full max-w-md border border-slate-100">
+      <div class="text-center mb-6">
+        <div class="w-14 h-14 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center mx-auto mb-3 text-2xl">
+          <i class="fa-solid fa-chart-line"></i>
+        </div>
+        <h2 class="text-2xl font-bold text-slate-800">MFG 產能分析系統</h2>
+        <p class="text-sm text-slate-500 mt-1">請輸入 Firebase 電子郵件與密碼登入</p>
+      </div>
       <div class="space-y-4">
         <div>
-          <label class="block text-sm font-medium text-slate-600 mb-1">電子郵件</label>
-          <input type="email" id="auth-email" class="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="user@example.com">
+          <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">電子郵件 (Email)</label>
+          <input type="email" id="auth-email" class="w-full border border-slate-300 rounded-lg px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition" placeholder="user@example.com">
         </div>
         <div>
-          <label class="block text-sm font-medium text-slate-600 mb-1">密碼</label>
-          <input type="password" id="auth-password" class="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="••••••••">
+          <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">密碼 (Password)</label>
+          <input type="password" id="auth-password" class="w-full border border-slate-300 rounded-lg px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition" placeholder="••••••••">
         </div>
-        <button onclick="handleLogin()" class="w-full bg-blue-600 text-white py-2 rounded-lg font-medium hover:bg-blue-700 transition">登入</button>
-        <div id="auth-error" class="text-red-500 text-sm text-center hidden"></div>
+        <button onclick="handleLogin()" class="w-full bg-blue-600 text-white py-2.5 rounded-lg font-medium hover:bg-blue-700 transition shadow-md shadow-blue-200 active:scale-[0.99]">驗證並登入</button>
+        <div id="auth-error" class="text-red-500 text-xs text-center hidden bg-red-50 p-2.5 rounded-lg border border-red-100"></div>
       </div>
     </div>
   </div>
 
-  <!-- 主導覽列 -->
-  <header class="bg-white shadow-sm border-b px-6 py-4 flex justify-between items-center">
-    <div class="flex items-center space-x-4">
-      <h1 class="text-xl font-bold text-slate-800">產值與同期比較&線上即時WIP&複材占比</h1>
-      <span id="user-email-display" class="text-sm text-slate-500 bg-slate-100 px-3 py-1 rounded-full">驗證中...</span>
+  <!-- 2. 主專案內容區塊 (未登入前預設隱藏 hidden) -->
+  <div id="app-container" class="hidden flex-col min-h-screen">
+    <!-- 主導覽列 -->
+    <header class="bg-white shadow-sm border-b px-6 py-4 flex justify-between items-center flex-wrap gap-4">
+      <div class="flex items-center space-x-4">
+        <h1 class="text-xl font-bold text-slate-800">產值與同期比較&線上即時WIP&複材占比</h1>
+        <span id="user-email-display" class="text-sm text-slate-500 bg-slate-100 px-3 py-1 rounded-full font-medium">驗證中...</span>
+      </div>
+      
+      <div class="flex items-center space-x-4">
+        <!-- 動態時間顯示 Banner -->
+        <div class="update-banner text-xs text-slate-500 flex items-center space-x-1 bg-slate-50 px-3 py-1.5 rounded-lg border">
+          <i class="fa-regular fa-clock"></i>
+          <span>上次更新日期時間：</span><span id="last-update-time-text" class="font-medium text-slate-700">讀取中...</span>
+        </div>
+
+        <div class="flex items-center space-x-3">
+          <!-- 一鍵匯出所有工作表按鈕 -->
+          <button onclick="window.exportAllSheetsToExcel()" class="bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-emerald-700 transition flex items-center space-x-1.5 shadow-sm">
+            <i class="fa-solid fa-file-export text-xs"></i>
+            <span>一鍵匯出所有工作表</span>
+          </button>
+          
+          <!-- 一鍵匯入所有工作表按鈕 -->
+          <label class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition cursor-pointer flex items-center space-x-1.5 shadow-sm">
+            <i class="fa-solid fa-file-circle-plus text-xs"></i>
+            <span>一鍵匯入所有工作表</span>
+            <input type="file" accept=".xlsx, .xls" class="hidden" onchange="window.importAllSheetsFromExcel(event)">
+          </label>
+          <button onclick="handleLogout()" class="bg-rose-50 text-rose-600 border border-rose-200 px-4 py-2 rounded-lg text-sm font-medium hover:bg-rose-100 transition">登出系統</button>
+        </div>
+      </div>
+    </header>
+
+    <!-- 工作表標籤列 -->
+    <div class="bg-slate-50 border-b px-6 py-2 flex items-center justify-between overflow-x-auto">
+      <div id="sheets-tab-container" class="flex space-x-2 items-center"></div>
+      <button onclick="window.addSheet()" class="bg-slate-800 text-white px-3 py-1.5 rounded-md text-xs font-medium hover:bg-slate-700 transition">+ 新增工作表</button>
     </div>
-    
-    <div class="flex items-center space-x-4">
-      <!-- 加入的動態時間顯示 Banner -->
-      <div class="update-banner text-xs text-slate-500 flex items-center space-x-1 bg-slate-50 px-3 py-1.5 rounded-lg border">
-        <i class="fa-regular fa-clock"></i>
-        <span>上次更新日期時間：</span><span id="last-update-time-text" class="font-medium text-slate-700">讀取中...</span>
+
+    <!-- 主內容區 -->
+    <main class="flex-1 p-6 max-w-7xl mx-auto w-full space-y-6">
+      <div class="bg-white p-4 rounded-xl shadow-sm border flex flex-wrap gap-3 items-center justify-between">
+        <div class="flex items-center space-x-2">
+          <button onclick="window.addRow()" class="bg-indigo-600 text-white px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-indigo-700 transition">+ 新增列</button>
+          <button onclick="window.deleteLastRow()" class="bg-rose-100 text-rose-700 px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-rose-200 transition">刪除最後一列</button>
+          <button onclick="window.addColumn()" class="bg-indigo-600 text-white px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-indigo-700 transition">+ 新增欄</button>
+          <button onclick="window.deleteLastColumn()" class="bg-rose-100 text-rose-700 px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-rose-200 transition">刪除最後一欄</button>
+        </div>
+        <span class="text-xs text-slate-400">提示：雙擊工作表標籤可直接修改名稱</span>
       </div>
 
-      <div class="flex items-center space-x-3">
-        <button onclick="window.exportToExcel()" class="bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-emerald-700 transition">匯出 Excel</button>
-        <label class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition cursor-pointer">
-          匯入 Excel <input type="file" accept=".xlsx, .xls" class="hidden" onchange="window.importFromExcel(event)">
-        </label>
-        <button onclick="handleLogout()" class="bg-slate-200 text-slate-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-slate-300 transition">登入</button>
+      <div class="bg-white rounded-xl shadow-sm border overflow-x-auto">
+        <table id="app-table" class="w-full text-left border-collapse"></table>
       </div>
-    </div>
-  </header>
 
-  <!-- 工作表標籤列 -->
-  <div class="bg-slate-50 border-b px-6 py-2 flex items-center justify-between overflow-x-auto">
-    <div id="sheets-tab-container" class="flex space-x-2 items-center"></div>
-    <button onclick="window.addSheet()" class="bg-slate-800 text-white px-3 py-1.5 rounded-md text-xs font-medium hover:bg-slate-700 transition">+ 新增工作表</button>
+      <div id="charts-container" class="grid grid-cols-1 md:grid-cols-2 gap-6"></div>
+    </main>
   </div>
-
-  <!-- 主內容區 -->
-  <main class="flex-1 p-6 max-w-7xl mx-auto w-full space-y-6">
-    <div class="bg-white p-4 rounded-xl shadow-sm border flex flex-wrap gap-3 items-center justify-between">
-      <div class="flex items-center space-x-2">
-        <button onclick="window.addRow()" class="bg-indigo-600 text-white px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-indigo-700 transition">+ 新增列</button>
-        <button onclick="window.deleteLastRow()" class="bg-rose-100 text-rose-700 px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-rose-200 transition">刪除最後一列</button>
-        <button onclick="window.addColumn()" class="bg-indigo-600 text-white px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-indigo-700 transition">+ 新增欄</button>
-        <button onclick="window.deleteLastColumn()" class="bg-rose-100 text-rose-700 px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-rose-200 transition">刪除最後一欄</button>
-      </div>
-      <span class="text-xs text-slate-400">提示：雙擊工作表標籤可直接修改名稱</span>
-    </div>
-
-    <div class="bg-white rounded-xl shadow-sm border overflow-x-auto">
-      <table id="app-table" class="w-full text-left border-collapse"></table>
-    </div>
-
-    <div id="charts-container" class="grid grid-cols-1 md:grid-cols-2 gap-6"></div>
-  </main>
 
   <script>
     // Firebase 設定
@@ -114,7 +134,7 @@
 
     const defaultState = {
       currentSheetId: 'sheet_1',
-      updatedAt: null, // 記錄最後更新時間
+      updatedAt: null,
       sheets: [
         {
           id: 'sheet_1',
@@ -170,9 +190,7 @@
     window.appState = localCachedState ? JSON.parse(localCachedState) : defaultState;
     window.isAuthorizedEditor = false;
     window.chartInstances = {};
-    let isDataLoadedFromCloud = false;
 
-    // 格式化與更新動態時間顯示函式
     window.formatDateTime = function(isoString) {
       if (!isoString) return '尚無更新紀錄';
       const d = new Date(isoString);
@@ -188,27 +206,34 @@
     window.updateTimeDisplay = function() {
       const timeEl = document.getElementById('last-update-time-text');
       if (timeEl) {
-        // 使用動態抓取的真實時間
         timeEl.innerText = window.appState.updatedAt ? window.formatDateTime(window.appState.updatedAt) : '尚未記錄';
       }
     };
 
+    // Firebase 身分認證監聽：必須登入才能看到與操作系統
     auth.onAuthStateChanged(user => {
+      const modal = document.getElementById('auth-modal');
+      const container = document.getElementById('app-container');
+      const emailDisplay = document.getElementById('user-email-display');
+
       if (user) {
         window.isAuthorizedEditor = true;
-        document.getElementById('auth-modal').classList.add('hidden');
-        document.getElementById('user-email-display').textContent = user.email;
+        modal.classList.add('hidden');
+        container.classList.remove('hidden');
+        container.classList.add('flex');
+        emailDisplay.textContent = user.email;
         loadFromFirebase();
       } else {
         window.isAuthorizedEditor = false;
-        document.getElementById('auth-modal').classList.remove('hidden');
-        document.getElementById('user-email-display').textContent = '未登入';
-        renderApp();
+        modal.classList.remove('hidden');
+        container.classList.add('hidden');
+        container.classList.remove('flex');
+        emailDisplay.textContent = '未登入';
       }
     });
 
     window.handleLogin = function() {
-      const email = document.getElementById('auth-email').value;
+      const email = document.getElementById('auth-email').value.trim();
       const pass = document.getElementById('auth-password').value;
       const errEl = document.getElementById('auth-error');
       
@@ -220,7 +245,8 @@
 
       auth.signInWithEmailAndPassword(email, pass)
         .then(() => {
-          alert("登入成功！");
+          errEl.classList.add('hidden');
+          document.getElementById('auth-password').value = '';
         })
         .catch(err => {
           errEl.textContent = "登入失敗：" + err.message;
@@ -235,7 +261,6 @@
     function autoSaveToFirebase() {
       if (!window.isAuthorizedEditor) return;
       
-      // 更新時間戳記
       window.appState.updatedAt = new Date().toISOString();
       window.updateTimeDisplay();
 
@@ -260,7 +285,6 @@
           window.appState.updatedAt = new Date().toISOString();
           db.ref('mfg_app_state').set(window.appState);
         }
-        isDataLoadedFromCloud = true;
         window.updateTimeDisplay();
         renderApp();
 
@@ -275,7 +299,6 @@
         });
       }).catch(err => {
         console.error("載入 Firebase 失敗:", err);
-        isDataLoadedFromCloud = true;
         window.updateTimeDisplay();
         renderApp();
       });
@@ -442,6 +465,7 @@
       if (!window.isAuthorizedEditor) return;
       const sheet = window.appState.sheets.find(s => s.id === window.appState.currentSheetId);
       sheet.data[rowIdx][key] = val;
+      renderCharts();
       autoSaveToFirebase();
     };
 
@@ -449,6 +473,7 @@
       if (!window.isAuthorizedEditor) return;
       const sheet = window.appState.sheets.find(s => s.id === window.appState.currentSheetId);
       sheet.columns[colIdx].title = val;
+      renderCharts();
       autoSaveToFirebase();
     };
 
@@ -643,7 +668,20 @@
     }
 
     function buildAllEightComparisonCharts(sheet) {
-      const activeMonths = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug"];
+      const allMonths = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+      let activeMonths = [];
+
+      if (sheet.data && sheet.data.length > 0) {
+        sheet.data.forEach(r => {
+          let m = String(r.month || r[sheet.columns[1]?.key] || '').trim();
+          if (m && allMonths.includes(m) && !activeMonths.includes(m)) {
+            activeMonths.push(m);
+          }
+        });
+      }
+      activeMonths.sort((a, b) => allMonths.indexOf(a) - allMonths.indexOf(b));
+      if (activeMonths.length === 0) activeMonths = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep"];
+
       const materials = ["石墨", "鎢鉬鉭", "other"];
 
       const numCols = sheet.columns.slice(2);
@@ -681,10 +719,8 @@
     }
 
     function getCombinedRowsForActiveMonths(materials, sheet, k23, k24, k25, k26, activeMonths) {
-      const allMonthsMap = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
       let combined = [];
       activeMonths.forEach((m) => {
-        let origIdx = allMonthsMap.indexOf(m);
         let rowObj = { month: m, [k23]: 0, [k24]: 0, [k25]: 0, [k26]: 0 };
         materials.forEach(mat => {
           let mRows = sheet.data.filter(r => {
@@ -694,7 +730,7 @@
             if (mLower === "other") return cat.includes("other") || cat.includes("其他");
             return cat.includes(mLower);
           });
-          let target = mRows[origIdx];
+          let target = mRows.find(r => String(r.month || r[sheet.columns[1]?.key] || '').trim() === m);
           if (target) {
             rowObj[k23] += parseNum(target[k23]);
             rowObj[k24] += parseNum(target[k24]);
@@ -717,11 +753,11 @@
         data: {
           labels: activeMonths,
           datasets: [
-            { label: l23, data: activeMonths.map((_, i) => parseNum(rows[i]?.[k23])), backgroundColor: '#10b981', datalabels: { display: false } },
-            { label: l24, data: activeMonths.map((_, i) => parseNum(rows[i]?.[k24])), backgroundColor: '#3b82f6', datalabels: { display: false } },
-            { label: l25, data: activeMonths.map((_, i) => parseNum(rows[i]?.[k25])), backgroundColor: '#f59e0b', datalabels: { display: false } },
+            { label: l23, data: activeMonths.map((m) => parseNum(rows.find(r => String(r.month || r.category).trim() === m)?.[k23] || rows[activeMonths.indexOf(m)]?.[k23])), backgroundColor: '#10b981', datalabels: { display: false } },
+            { label: l24, data: activeMonths.map((m) => parseNum(rows.find(r => String(r.month || r.category).trim() === m)?.[k24] || rows[activeMonths.indexOf(m)]?.[k24])), backgroundColor: '#3b82f6', datalabels: { display: false } },
+            { label: l25, data: activeMonths.map((m) => parseNum(rows.find(r => String(r.month || r.category).trim() === m)?.[k25] || rows[activeMonths.indexOf(m)]?.[k25])), backgroundColor: '#f59e0b', datalabels: { display: false } },
             { 
-              label: l26, data: activeMonths.map((_, i) => parseNum(rows[i]?.[k26])), backgroundColor: '#ef4444',
+              label: l26, data: activeMonths.map((m) => parseNum(rows.find(r => String(r.month || r.category).trim() === m)?.[k26] || rows[activeMonths.indexOf(m)]?.[k26])), backgroundColor: '#ef4444',
               datalabels: {
                 display: function(context) { return context.dataIndex === activeMonths.length - 1; },
                 align: 'end', anchor: 'end',
@@ -743,14 +779,13 @@
       if (window.chartInstances && window.chartInstances[chartId]) {
         window.chartInstances[chartId].destroy();
       }
-      if (!window.chartInstances) window.chartInstances = {};
 
       let s23 = 0, s24 = 0, s25 = 0, s26 = 0;
       const safeRows = rows || [];
-      const data23 = activeMonths.map((_, i) => { s23 += parseNum(safeRows[i]?.[k23]); return s23; });
-      const data24 = activeMonths.map((_, i) => { s24 += parseNum(safeRows[i]?.[k24]); return s24; });
-      const data25 = activeMonths.map((_, i) => { s25 += parseNum(safeRows[i]?.[k25]); return s25; });
-      const data26 = activeMonths.map((_, i) => { s26 += parseNum(safeRows[i]?.[k26]); return s26; });
+      const data23 = activeMonths.map((m, i) => { let r = safeRows.find(x => String(x.month || x.category).trim() === m) || safeRows[i]; s23 += parseNum(r?.[k23]); return s23; });
+      const data24 = activeMonths.map((m, i) => { let r = safeRows.find(x => String(x.month || x.category).trim() === m) || safeRows[i]; s24 += parseNum(r?.[k24]); return s24; });
+      const data25 = activeMonths.map((m, i) => { let r = safeRows.find(x => String(x.month || x.category).trim() === m) || safeRows[i]; s25 += parseNum(r?.[k25]); return s25; });
+      const data26 = activeMonths.map((m, i) => { let r = safeRows.find(x => String(x.month || x.category).trim() === m) || safeRows[i]; s26 += parseNum(r?.[k26]); return s26; });
 
       const totals = [{ year: l23, val: s23 }, { year: l24, val: s24 }, { year: l25, val: s25 }, { year: l26, val: s26 }];
       totals.sort((a, b) => b.val - a.val);
@@ -785,63 +820,91 @@
       });
     }
 
-    window.exportToExcel = function() {
-      if (!window.appState || !window.appState.sheets) {
-        alert("沒有可匯出的資料狀態！");
-        return;
-      }
-      const wb = XLSX.utils.book_new();
-      window.appState.sheets.forEach(sheet => {
-        const exportData = (sheet.data || []).map(row => {
-          let obj = {};
-          (sheet.columns || []).forEach(col => { obj[col.title] = row[col.key]; });
-          return obj;
+    // 4. 一鍵匯出所有工作表功能
+    window.exportAllSheetsToExcel = function() {
+      try {
+        if (typeof XLSX === 'undefined') return alert('SheetJS 尚未載入完成！');
+        if (!window.appState || !window.appState.sheets || window.appState.sheets.length === 0) {
+          return alert('目前沒有可匯出的工作表資料！');
+        }
+
+        const wb = XLSX.utils.book_new();
+
+        window.appState.sheets.forEach(sheet => {
+          const headers = (sheet.columns || []).map(c => c.title);
+          const rowsData = (sheet.data || []).map(row => {
+            const obj = {};
+            (sheet.columns || []).forEach(c => {
+              obj[c.title] = row[c.key] !== undefined ? row[c.key] : '';
+            });
+            return obj;
+          });
+
+          const ws = XLSX.utils.json_to_sheet(rowsData, { header: headers });
+          XLSX.utils.book_append_sheet(wb, ws, sheet.name);
         });
-        const ws = XLSX.utils.json_to_sheet(exportData);
-        XLSX.utils.book_append_sheet(wb, ws, sheet.name);
-      });
-      XLSX.writeFile(wb, "MFG_Analysis_System.xlsx");
+
+        const todayStr = new Date().toISOString().slice(0, 10);
+        XLSX.writeFile(wb, `MFG_Analysis_System_${todayStr}.xlsx`);
+      } catch (err) {
+        console.error(err);
+        alert('匯出 Excel 失敗：' + err.message);
+      }
     };
 
-    window.importFromExcel = async function(event) {
+    // 5. 一鍵匯入所有相符工作表功能
+    window.importAllSheetsFromExcel = async function(event) {
       if (!window.isAuthorizedEditor) { alert("需要管理者權限才能匯入！"); return; }
       const file = event.target.files[0];
       if (!file) return;
+
       const reader = new FileReader();
       reader.onload = async function(e) {
         try {
           const data = new Uint8Array(e.target.result);
           const workbook = XLSX.read(data, { type: 'array' });
-          const sheetName = workbook.SheetNames[1] || workbook.SheetNames[0]; 
-          const worksheet = workbook.Sheets[sheetName];
-          const json = XLSX.utils.sheet_to_json(worksheet);
-          
-          if (json.length > 0) {
-            const keys = Object.keys(json[0]);
-            const columns = keys.map((k, i) => ({ key: i === 0 ? 'category' : 'col_' + i, title: k }));
-            const sheetData = json.map(row => {
-              let rObj = {};
-              keys.forEach((k, i) => { rObj[columns[i].key] = row[k]; });
-              return rObj;
-            });
+          let matchedCount = 0;
 
-            if (!window.appState) window.appState = { sheets: [] };
-            const currentSheet = window.appState.sheets.find(s => s.id === window.appState.currentSheetId) || window.appState.sheets[1] || window.appState.sheets[0];
-            if (currentSheet) {
-              currentSheet.columns = columns;
-              currentSheet.data = sheetData;
+          workbook.SheetNames.forEach(sheetName => {
+            const targetSheet = window.appState.sheets.find(s => s.name.trim() === sheetName.trim());
+            if (targetSheet) {
+              const worksheet = workbook.Sheets[sheetName];
+              const json = XLSX.utils.sheet_to_json(worksheet);
+              
+              if (json.length > 0) {
+                const keys = Object.keys(json[0]);
+                const columns = keys.map((k, idx) => ({
+                  key: idx === 0 ? 'category' : (idx === 1 && k.toLowerCase().includes('month') ? 'month' : 'col_' + idx),
+                  title: k
+                }));
+
+                const sheetData = json.map(row => {
+                  let rObj = {};
+                  keys.forEach((k, idx) => {
+                    rObj[columns[idx].key] = row[k];
+                  });
+                  return rObj;
+                });
+
+                targetSheet.columns = columns;
+                targetSheet.data = sheetData;
+                matchedCount++;
+              }
             }
-            
-            if (typeof renderApp === 'function') renderApp();
-            if (typeof autoSaveToFirebase === 'function') autoSaveToFirebase();
-            alert("Excel 匯入成功，並已同步至 Firebase！");
+          });
+
+          if (matchedCount > 0) {
+            renderApp();
+            autoSaveToFirebase();
+            alert(`成功更新 ${matchedCount} 個相符名稱的工作表，圖表已同步更新！`);
           } else {
-            alert("匯入的 Excel 檔案沒有資料！");
+            alert("Excel 中的工作表名稱與目前系統中的工作表名稱皆不符合！");
           }
         } catch (err) {
           console.error(err);
           alert("解析 Excel 檔案失敗，請確認檔案格式是否正確。");
         }
+        event.target.value = '';
       };
       reader.readAsArrayBuffer(file);
     };

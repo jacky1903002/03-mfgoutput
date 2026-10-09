@@ -669,19 +669,6 @@
 
     function buildAllEightComparisonCharts(sheet) {
       const allMonths = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-      let activeMonths = [];
-
-      if (sheet.data && sheet.data.length > 0) {
-        sheet.data.forEach(r => {
-          let m = String(r.month || r[sheet.columns[1]?.key] || '').trim();
-          if (m && allMonths.includes(m) && !activeMonths.includes(m)) {
-            activeMonths.push(m);
-          }
-        });
-      }
-      activeMonths.sort((a, b) => allMonths.indexOf(a) - allMonths.indexOf(b));
-      if (activeMonths.length === 0) activeMonths = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep"];
-
       const materials = ["石墨", "鎢鉬鉭", "other"];
 
       const numCols = sheet.columns.slice(2);
@@ -694,6 +681,35 @@
       const label24 = numCols[numCols.length - 3] ? numCols[numCols.length - 3].title : '2024';
       const label25 = numCols[numCols.length - 2] ? numCols[numCols.length - 2].title : '2025';
       const label26 = numCols[numCols.length - 1] ? numCols[numCols.length - 1].title : '2026';
+
+      // 判斷最後一個年度 (k26) 有有效資料的月份 (當最後一個年度無資料時，該月份自動隱藏不計算)
+      let activeMonths = [];
+      allMonths.forEach(m => {
+        let hasDataInLatestYear = false;
+        sheet.data.forEach(row => {
+          let rowMonth = String(row.month || row[sheet.columns[1]?.key] || '').trim();
+          if (rowMonth === m) {
+            let val = parseNum(row[k26]);
+            if (val > 0) {
+              hasDataInLatestYear = true;
+            }
+          }
+        });
+        if (hasDataInLatestYear) {
+          activeMonths.push(m);
+        }
+      });
+
+      // 防呆：如果最新年度完全無資料，則預設讀取表格中所有出現過的月份
+      if (activeMonths.length === 0 && sheet.data) {
+        sheet.data.forEach(r => {
+          let m = String(r.month || r[sheet.columns[1]?.key] || '').trim();
+          if (m && allMonths.includes(m) && !activeMonths.includes(m)) {
+            activeMonths.push(m);
+          }
+        });
+        activeMonths.sort((a, b) => allMonths.indexOf(a) - allMonths.indexOf(b));
+      }
 
       const getMaterialRows = (mat) => {
         return sheet.data.filter(r => {
@@ -753,11 +769,11 @@
         data: {
           labels: activeMonths,
           datasets: [
-            { label: l23, data: activeMonths.map((m) => parseNum(rows.find(r => String(r.month || r.category).trim() === m)?.[k23] || rows[activeMonths.indexOf(m)]?.[k23])), backgroundColor: '#10b981', datalabels: { display: false } },
-            { label: l24, data: activeMonths.map((m) => parseNum(rows.find(r => String(r.month || r.category).trim() === m)?.[k24] || rows[activeMonths.indexOf(m)]?.[k24])), backgroundColor: '#3b82f6', datalabels: { display: false } },
-            { label: l25, data: activeMonths.map((m) => parseNum(rows.find(r => String(r.month || r.category).trim() === m)?.[k25] || rows[activeMonths.indexOf(m)]?.[k25])), backgroundColor: '#f59e0b', datalabels: { display: false } },
+            { label: l23, data: activeMonths.map((m) => parseNum(rows.find(r => String(r.month || r.category).trim() === m)?.[k23])), backgroundColor: '#10b981', datalabels: { display: false } },
+            { label: l24, data: activeMonths.map((m) => parseNum(rows.find(r => String(r.month || r.category).trim() === m)?.[k24])), backgroundColor: '#3b82f6', datalabels: { display: false } },
+            { label: l25, data: activeMonths.map((m) => parseNum(rows.find(r => String(r.month || r.category).trim() === m)?.[k25])), backgroundColor: '#f59e0b', datalabels: { display: false } },
             { 
-              label: l26, data: activeMonths.map((m) => parseNum(rows.find(r => String(r.month || r.category).trim() === m)?.[k26] || rows[activeMonths.indexOf(m)]?.[k26])), backgroundColor: '#ef4444',
+              label: l26, data: activeMonths.map((m) => parseNum(rows.find(r => String(r.month || r.category).trim() === m)?.[k26])), backgroundColor: '#ef4444',
               datalabels: {
                 display: function(context) { return context.dataIndex === activeMonths.length - 1; },
                 align: 'end', anchor: 'end',
@@ -782,6 +798,8 @@
 
       let s23 = 0, s24 = 0, s25 = 0, s26 = 0;
       const safeRows = rows || [];
+      
+      // 僅針對有顯示的 activeMonths 進行累加計算，排除隱藏月份資料
       const data23 = activeMonths.map((m, i) => { let r = safeRows.find(x => String(x.month || x.category).trim() === m) || safeRows[i]; s23 += parseNum(r?.[k23]); return s23; });
       const data24 = activeMonths.map((m, i) => { let r = safeRows.find(x => String(x.month || x.category).trim() === m) || safeRows[i]; s24 += parseNum(r?.[k24]); return s24; });
       const data25 = activeMonths.map((m, i) => { let r = safeRows.find(x => String(x.month || x.category).trim() === m) || safeRows[i]; s25 += parseNum(r?.[k25]); return s25; });
@@ -790,6 +808,7 @@
       const totals = [{ year: l23, val: s23 }, { year: l24, val: s24 }, { year: l25, val: s25 }, { year: l26, val: s26 }];
       totals.sort((a, b) => b.val - a.val);
 
+      // 同期 YoY 計算：僅使用 activeMonths 範圍內累計的 s26 與 s25 做比較 (忽略被隱藏月份數據)
       const yoyVal = s25 > 0 ? ((s26 - s25) / s25 * 100).toFixed(1) : '0.0';
       const titleEl = document.getElementById(`title-${chartId}`);
       if (titleEl) {

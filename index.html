@@ -111,9 +111,6 @@
         <table id="app-table" class="w-full text-left border-collapse"></table>
       </div>
 
-      <!-- 動態分析卡片與摘要區 -->
-      <div id="analysis-cards-container" class="space-y-6"></div>
-
       <div id="charts-container" class="grid grid-cols-1 md:grid-cols-2 gap-6"></div>
     </main>
   </div>
@@ -141,7 +138,7 @@
       sheets: [
         {
           id: 'sheet_1',
-          name: '產能量能分析',
+          name: '產值分析',
           columns: [
             { key: 'category', title: '類別' },
             { key: 'month', title: '月份' },
@@ -150,31 +147,27 @@
             { key: '2025', title: '2025' },
             { key: '2026', title: '2026' }
           ],
-          data: [
-            { category: '石墨產值', month: 'Aug', '2023': 1200000, '2024': 1500000, '2025': 1800000, '2026': 2100000 },
-            { category: '石墨產值', month: 'Sep', '2023': 1300000, '2024': 1600000, '2025': 1900000, '2026': 2550000 },
-            { category: '石墨數量', month: 'Aug', '2023': 500, '2024': 600, '2025': 700, '2026': 850 },
-            { category: '石墨數量', month: 'Sep', '2023': 550, '2024': 620, '2025': 720, '2026': 920 },
-            { category: '鎢鉬鉭產值', month: 'Aug', '2023': 800000, '2024': 900000, '2025': 1000000, '2026': 1200000 },
-            { category: '鎢鉬鉭產值', month: 'Sep', '2023': 850000, '2024': 950000, '2025': 1100000, '2026': 1050000 },
-            { category: '鎢鉬鉭數量', month: 'Aug', '2023': 300, '2024': 350, '2025': 400, '2026': 450 },
-            { category: '鎢鉬鉭數量', month: 'Sep', '2023': 320, '2024': 360, '2025': 410, '2026': 390 }
-          ]
+          data: []
         },
         {
           id: 'sheet_2',
-          name: '各客戶累積產值',
+          name: '線上WIP',
           columns: [
-            { key: 'category', title: '客戶/類別' },
+            { key: 'category', title: '類別' },
+            { key: 'May-26', title: 'May-26' },
+            { key: 'Jun-26', title: 'Jun-26' },
+            { key: 'Jul-26', title: 'Jul-26' },
             { key: 'Aug-26', title: 'Aug-26' },
             { key: 'Sep-26', title: 'Sep-26' }
           ],
           data: [
-            { category: '客戶A (大客戶)', 'Aug-26': 8500000, 'Sep-26': 10200000 },
-            { category: '客戶B (穩定成長)', 'Aug-26': 4200000, 'Sep-26': 5500000 },
-            { category: '客戶C (產能遞減)', 'Aug-26': 6800000, 'Sep-26': 5200000 },
-            { category: '客戶D (急遽下滑)', 'Aug-26': 3500000, 'Sep-26': 1800000 },
-            { category: '客戶E (一般交貨)', 'Aug-26': 2100000, 'Sep-26': 2300000 }
+            { category: '線切割', 'May-26': 10404, 'Jun-26': 7996, 'Jul-26': 7865, 'Aug-26': 10368, 'Sep-26': 8219 },
+            { category: '金屬一課', 'May-26': 8577, 'Jun-26': 9414, 'Jul-26': 8363, 'Aug-26': 10913, 'Sep-26': 10522 },
+            { category: '金屬二課', 'May-26': 10690, 'Jun-26': 7596, 'Jul-26': 10942, 'Aug-26': 7758, 'Sep-26': 8800 },
+            { category: '車床課', 'May-26': 10171, 'Jun-26': 8541, 'Jul-26': 8072, 'Aug-26': 10916, 'Sep-26': 9189 },
+            { category: '最終檢驗', 'May-26': 8106, 'Jun-26': 10719, 'Jul-26': 8666, 'Aug-26': 8028, 'Sep-26': 10365 },
+            { category: '表面處理', 'May-26': 7468, 'Jun-26': 10138, 'Jul-26': 8875, 'Aug-26': 10351, 'Sep-26': 7622 },
+            { category: '後處理', 'May-26': 9806, 'Jun-26': 10804, 'Jul-26': 9468, 'Aug-26': 9993, 'Sep-26': 9153 }
           ]
         },
         {
@@ -195,6 +188,7 @@
 
     const localCachedState = localStorage.getItem('mfg_app_state_cache');
     window.appState = localCachedState ? JSON.parse(localCachedState) : defaultState;
+    // 每次重新整理或開啟頁面，強制切換至第一個工作表
     if (window.appState && window.appState.sheets && window.appState.sheets.length > 0) {
       window.appState.currentSheetId = window.appState.sheets[0].id;
     }
@@ -221,6 +215,7 @@
       }
     };
 
+    // Firebase 身分認證監聽：必須登入才能看到與操作系統
     auth.onAuthStateChanged(user => {
       const modal = document.getElementById('auth-modal');
       const container = document.getElementById('app-container');
@@ -260,7 +255,7 @@
         })
         .catch(err => {
           errEl.textContent = "登入失敗：" + err.message;
-          errEl.classList.add('hidden');
+          errEl.classList.remove('hidden');
         });
     };
 
@@ -290,6 +285,7 @@
         const val = snapshot.val();
         if (val && val.sheets && val.sheets.length > 0) {
           window.appState = val;
+          // 重整載入時強制選取第一個工作表
           window.appState.currentSheetId = val.sheets[0].id;
           localStorage.setItem('mfg_app_state_cache', JSON.stringify(window.appState));
         } else {
@@ -305,6 +301,7 @@
           if (liveVal && liveVal.sheets && liveVal.sheets.length > 0) {
             const currentTabId = window.appState.currentSheetId || liveVal.sheets[0].id;
             window.appState = liveVal;
+            // 保持當前正在查看的工作表，若無則預設第一個
             window.appState.currentSheetId = liveVal.sheets.some(s => s.id === currentTabId) ? currentTabId : liveVal.sheets[0].id;
             localStorage.setItem('mfg_app_state_cache', JSON.stringify(window.appState));
             window.updateTimeDisplay();
@@ -318,10 +315,10 @@
       });
     }
 
+    // 核心渲染與工作表操作
     window.renderApp = function() {
       renderSheetsTabs();
       renderTable();
-      renderAnalysisCards();
       renderCharts();
       window.updateTimeDisplay();
     }
@@ -479,7 +476,6 @@
       if (!window.isAuthorizedEditor) return;
       const sheet = window.appState.sheets.find(s => s.id === window.appState.currentSheetId);
       sheet.data[rowIdx][key] = val;
-      renderAnalysisCards();
       renderCharts();
       autoSaveToFirebase();
     };
@@ -488,151 +484,9 @@
       if (!window.isAuthorizedEditor) return;
       const sheet = window.appState.sheets.find(s => s.id === window.appState.currentSheetId);
       sheet.columns[colIdx].title = val;
-      renderAnalysisCards();
       renderCharts();
       autoSaveToFirebase();
     };
-
-    function parseNum(val) {
-      if (val === undefined || val === null || val === '') return 0;
-      let s = String(val).replace(/,/g, '');
-      let n = parseFloat(s);
-      return isNaN(n) ? 0 : n;
-    }
-
-    // 渲染動態分析卡片
-    function renderAnalysisCards() {
-      const container = document.getElementById('analysis-cards-container');
-      if (!container) return;
-      container.innerHTML = '';
-
-      const sheetIndex = window.appState.sheets.findIndex(s => s.id === window.appState.currentSheetId);
-      const sheet = window.appState.sheets[sheetIndex];
-      if (!sheet) return;
-
-      if (sheetIndex === 0) {
-        // 工作表一：「產能量能分析」卡片
-        const numCols = sheet.columns.slice(2);
-        if (numCols.length < 2) return;
-        const prevCol = numCols[numCols.length - 2];
-        const lastCol = numCols[numCols.length - 1];
-
-        // 分離產值與數量
-        const outputRows = sheet.data.filter(r => String(r.category || r[sheet.columns[0].key] || '').includes('產值'));
-        const qtyRows = sheet.data.filter(r => String(r.category || r[sheet.columns[0].key] || '').includes('數量'));
-
-        const buildCardHtml = (title, rows) => {
-          let itemsHtml = '';
-          if (rows.length === 0) {
-            itemsHtml = `<p class="text-sm text-slate-400">無相關數據（請於類別名稱包含「產值」或「數量」）</p>`;
-          } else {
-            itemsHtml = `<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">`;
-            rows.forEach(r => {
-              const cat = String(r.category || r[sheet.columns[0].key] || '未命名');
-              const vPrev = parseNum(r[prevCol.key]);
-              const vLast = parseNum(r[lastCol.key]);
-              const diff = vLast - vPrev;
-              const pct = vPrev !== 0 ? ((diff / vPrev) * 100).toFixed(1) : '0.0';
-              const isPos = diff >= 0;
-              const colorClass = isPos ? 'text-blue-600 bg-blue-50 border-blue-100' : 'text-rose-600 bg-rose-50 border-rose-100';
-              const sign = isPos ? '+' : '';
-
-              itemsHtml += `
-                <div class="bg-slate-50 p-4 rounded-xl border border-slate-200/80 flex flex-col justify-between">
-                  <div>
-                    <div class="text-xs font-semibold text-slate-500 uppercase tracking-wide">${cat}</div>
-                    <div class="text-lg font-bold text-slate-800 mt-1">${vLast.toLocaleString()} <span class="text-xs font-normal text-slate-400">(${lastCol.title})</span></div>
-                  </div>
-                  <div class="mt-3 pt-3 border-t border-slate-200 flex items-center justify-between text-sm">
-                    <span class="text-xs text-slate-500">前月 (${prevCol.title}): ${vPrev.toLocaleString()}</span>
-                    <span class="px-2 py-0.5 rounded-md font-semibold text-xs border ${colorClass}">${sign}${diff.toLocaleString()} (${sign}${pct}%)</span>
-                  </div>
-                </div>
-              `;
-            });
-            itemsHtml += `</div>`;
-          }
-
-          return `
-            <div class="bg-white p-6 rounded-xl shadow-sm border space-y-4">
-              <h3 class="font-bold text-slate-800 text-base flex items-center space-x-2">
-                <i class="fa-solid fa-chart-pie text-blue-600"></i>
-                <span>${title}</span>
-                <span class="text-xs font-normal text-slate-400">（比較期間：${prevCol.title} ➔ ${lastCol.title}）</span>
-              </h3>
-              ${itemsHtml}
-            </div>
-          `;
-        };
-
-        container.innerHTML = buildCardHtml('各類別產值狀況 (NT$)', outputRows) + buildCardHtml('各類別生產數量 (PCS)', qtyRows);
-
-      } else if (sheetIndex === 1) {
-        // 工作表二：「各客戶累積產值」強勁與疲軟類別分析卡片與列表
-        const cols = sheet.columns.slice(1);
-        if (cols.length < 2) return;
-        const prevCol = cols[cols.length - 2];
-        const lastCol = cols[cols.length - 1];
-
-        let strongList = [];
-        let weakList = [];
-
-        sheet.data.forEach(r => {
-          const cat = String(r.category || r[sheet.columns[0].key] || '未命名');
-          const vPrev = parseNum(r[prevCol.key]);
-          const vLast = parseNum(r[lastCol.key]);
-          const diff = vLast - vPrev;
-
-          if (diff > 1000000) {
-            strongList.push({ cat, vPrev, vLast, diff });
-          } else if (diff < -1000000) {
-            weakList.push({ cat, vPrev, vLast, diff });
-          }
-        });
-
-        const buildStrongWeakSection = (title, list, isStrong) => {
-          const badgeColor = isStrong ? 'bg-blue-100 text-blue-700 border-blue-200' : 'bg-rose-100 text-rose-700 border-rose-200';
-          const valColor = isStrong ? 'text-blue-600' : 'text-rose-600';
-          let html = '';
-
-          if (list.length === 0) {
-            html = `<p class="text-sm text-slate-400 py-2">目前無符合條件之類別。</p>`;
-          } else {
-            html = `<div class="divide-y divide-slate-100">`;
-            list.forEach(item => {
-              html += `
-                <div class="py-3 flex items-center justify-between">
-                  <div class="font-medium text-slate-700 text-sm">${item.cat}</div>
-                  <div class="text-right">
-                    <span class="font-bold text-sm ${valColor}">${item.diff > 0 ? '+' : ''}${item.diff.toLocaleString()} NT$</span>
-                    <div class="text-xs text-slate-400">${prevCol.title}: ${item.vPrev.toLocaleString()} ➔ ${lastCol.title}: ${item.vLast.toLocaleString()}</div>
-                  </div>
-                </div>
-              `;
-            });
-            html += `</div>`;
-          }
-
-          return `
-            <div class="bg-white p-6 rounded-xl shadow-sm border flex-1 space-y-4">
-              <div class="flex items-center justify-between">
-                <h3 class="font-bold text-slate-800 text-base">${title}</h3>
-                <span class="text-xs px-2.5 py-1 rounded-full border font-semibold ${badgeColor}">${list.length} 項</span>
-              </div>
-              <p class="text-xs text-slate-400">${isStrong ? '最後一月減去前一月 > 1,000,000 NT$' : '最後一月減去前一月 < -1,000,000 NT$'}</p>
-              ${html}
-            </div>
-          `;
-        };
-
-        container.innerHTML = `
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-            ${buildStrongWeakSection('量能強勁類別', strongList, true)}
-            ${buildStrongWeakSection('量能疲軟類別', weakList, false)}
-          </div>
-        `;
-      }
-    }
 
     // 圖表與熱力表引擎
     function renderCharts() {
@@ -670,10 +524,10 @@
         wrapper.innerHTML = `
           <div class="flex justify-between items-center mb-4">
             <div>
-              <h3 class="font-bold text-slate-800 text-lg">各客戶累積產值 - 熱力圖分析</h3>
-              <p class="text-xs text-slate-500 mt-0.5">依各客戶(列)各自獨立呈現大紅小綠對比</p>
+              <h3 class="font-bold text-slate-800 text-lg">線上WIP - 熱力圖分析</h3>
+              <p class="text-xs text-slate-500 mt-0.5">依各部門(列)各自獨立呈現大紅小綠對比</p>
             </div>
-            <button onclick="window.exportChartToPNG('sheet2-heatmap', '客戶產值熱力圖')" class="export-btn text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 px-3 py-1.5 rounded transition">匯出圖片</button>
+            <button onclick="window.exportChartToPNG('sheet2-heatmap', 'WIP熱力圖')" class="export-btn text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 px-3 py-1.5 rounded transition">匯出圖片</button>
           </div>
           <div id="heatmap-container" class="overflow-x-auto w-full"></div>
         `;
@@ -698,6 +552,13 @@
 
         buildWideTableLineChart(sheet);
       }
+    }
+
+    function parseNum(val) {
+      if (val === undefined || val === null || val === '') return 0;
+      let s = String(val).replace(/,/g, '');
+      let n = parseFloat(s);
+      return isNaN(n) ? 0 : n;
     }
 
     function buildWipHeatmapDirect(sheet) {
@@ -985,6 +846,7 @@
       });
     }
 
+    // 4. 一鍵匯出所有工作表功能
     window.exportAllSheetsToExcel = function() {
       try {
         if (typeof XLSX === 'undefined') return alert('SheetJS 尚未載入完成！');
@@ -1016,6 +878,7 @@
       }
     };
 
+    // 5. 一鍵匯入所有相符工作表功能
     window.importAllSheetsFromExcel = async function(event) {
       if (!window.isAuthorizedEditor) { alert("需要管理者權限才能匯入！"); return; }
       const file = event.target.files[0];
@@ -1059,7 +922,7 @@
           if (matchedCount > 0) {
             renderApp();
             autoSaveToFirebase();
-            alert(`成功更新 ${matchedCount} 個相符名稱的工作表，分析卡片與圖表已同步更新！`);
+            alert(`成功更新 ${matchedCount} 個相符名稱的工作表，圖表已同步更新！`);
           } else {
             alert("Excel 中的工作表名稱與目前系統中的工作表名稱皆不符合！");
           }

@@ -74,7 +74,7 @@
         </div>
 
         <div class="flex items-center space-x-3 flex-wrap gap-y-2">
-          <!-- 一鍵匯出所有頁面圖表成 PDF 功能 (支援全頁面與防中文亂碼) -->
+          <!-- 一鍵匯出所有頁面圖表成 PDF 功能 -->
           <button onclick="window.exportAllPagesChartsToPDF()" class="bg-rose-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-rose-700 transition flex items-center space-x-1.5 shadow-sm">
             <i class="fa-solid fa-file-pdf text-xs"></i>
             <span>一鍵匯出所有頁面圖表PDF</span>
@@ -1033,10 +1033,10 @@
       if (btn) btn.style.display = 'none';
 
       html2canvas(element, { 
-        scale: 3, 
-        useCORS: true,
-        backgroundColor: '#ffffff'
-      }).then(canvas => {
+            scale: 3, 
+            useCORS: true,
+            backgroundColor: '#ffffff'
+          }).then(canvas => {
         if (btn) btn.style.display = '';
         const link = document.createElement('a');
         link.download = `${title || 'chart'}.png`;
@@ -1049,7 +1049,7 @@
       });
     };
 
-    // 核心修正：跨所有工作表循環渲染、擷取並匯出成 PDF (完全解決中文亂碼)
+    // 一鍵跨所有工作表循環渲染、擷取並匯出成 PDF (完全解決中文亂碼)
     window.exportAllPagesChartsToPDF = async function() {
       try {
         if (typeof window.jspdf === 'undefined' || typeof html2canvas === 'undefined') {
@@ -1070,12 +1070,10 @@
         // 迴圈遍歷所有工作表
         for (let sIdx = 0; sIdx < sheets.length; sIdx++) {
           const sheet = sheets[sIdx];
-          // 切換至該工作表並重新渲染以載入對應圖表DOM
           window.appState.currentSheetId = sheet.id;
           renderApp();
 
-          // 等待 DOM 與 Chart.js 繪製完成
-          await new Promise(resolve => setTimeout(resolve, 300));
+          await new Promise(resolve => setTimeout(resolve, 350));
 
           const chartElements = document.querySelectorAll('.exportable-chart-card');
           for (let cIdx = 0; cIdx < chartElements.length; cIdx++) {
@@ -1101,15 +1099,10 @@
               pdf.addPage();
             }
 
-            // 安全英文字首與頁籤標題，確保完全不發生亂碼
-            pdf.setFont("helvetica", "bold");
-            pdf.setFontSize(10);
-            pdf.setTextColor(60, 60, 60);
-            pdf.text(`[Sheet: ${sheet.name}] Chart #${totalChartsExported + 1}`, margin, 8);
-
-            let yPos = 12;
-            if (printHeight > pdfHeight - 20) {
-              pdf.addImage(imgData, 'JPEG', margin, yPos, printWidth, pdfHeight - 20);
+            // 直接將完整圖表卡片（包含中文卡片標題）完整透過畫布渲染，不在 PDF 頂端手動印字以避免任何亂碼
+            let yPos = 10;
+            if (printHeight > pdfHeight - 15) {
+              pdf.addImage(imgData, 'JPEG', margin, yPos, printWidth, pdfHeight - 15);
             } else {
               pdf.addImage(imgData, 'JPEG', margin, yPos, printWidth, printHeight);
             }
@@ -1119,7 +1112,6 @@
           }
         }
 
-        // 還原原本使用者所在的頁面
         window.appState.currentSheetId = originalSheetId;
         renderApp();
 
@@ -1132,7 +1124,6 @@
 
       } catch (err) {
         console.error("跨頁面 PDF 匯出失敗：", err);
-        // 確保發生錯誤時也能還原畫面
         window.appState.currentSheetId = originalSheetId;
         renderApp();
         alert("匯出 PDF 時發生錯誤：" + err.message);

@@ -74,10 +74,10 @@
         </div>
 
         <div class="flex items-center space-x-3 flex-wrap gap-y-2">
-          <!-- 一鍵匯出所有頁面圖表成 PDF 功能 -->
-          <button onclick="window.exportAllChartsToPDF()" class="bg-rose-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-rose-700 transition flex items-center space-x-1.5 shadow-sm">
+          <!-- 一鍵匯出所有頁面圖表成 PDF 功能 (支援全頁面與防中文亂碼) -->
+          <button onclick="window.exportAllPagesChartsToPDF()" class="bg-rose-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-rose-700 transition flex items-center space-x-1.5 shadow-sm">
             <i class="fa-solid fa-file-pdf text-xs"></i>
-            <span>匯出所有圖表為PDF</span>
+            <span>一鍵匯出所有頁面圖表PDF</span>
           </button>
 
           <!-- 一鍵匯出所有工作表按鈕 -->
@@ -912,7 +912,6 @@
               const colTitle = String(sheet.columns[C]?.title || '').toLowerCase();
               let cellValue = ws[cellRef].v;
 
-              // 需求 3, 4, 5: 通用格式強制設定
               let forceGeneral = false;
               if (sheetIdx === 0 && (colKey === 'category' || colKey === 'month' || colTitle.includes('category') || colTitle.includes('類別') || colTitle.includes('month') || colTitle.includes('月份'))) {
                 forceGeneral = true;
@@ -1050,8 +1049,8 @@
       });
     };
 
-    // 需求 6 修正：以高品質影像包裝 PDF 避開 jsPDF 內建字型亂碼
-    window.exportAllChartsToPDF = async function() {
+    // 核心修正：跨所有工作表循環渲染、擷取並匯出成 PDF (完全解決中文亂碼)
+    window.exportAllPagesChartsToPDF = async function() {
       try {
         if (typeof window.jspdf === 'undefined' || typeof html2canvas === 'undefined') {
           return alert("PDF 匯出模組仍在載入中，請稍後再試！");
@@ -1062,59 +1061,80 @@
         const pdfWidth = pdf.internal.pageSize.getWidth();
         const pdfHeight = pdf.internal.pageSize.getHeight();
 
-        const chartElements = document.querySelectorAll('.exportable-chart-card');
-        if (chartElements.length === 0) {
-          return alert("當前工作表沒有可匯出的圖表！");
-        }
+        const originalSheetId = window.appState.currentSheetId;
+        const sheets = window.appState.sheets;
 
-        const currentSheet = window.appState.sheets.find(s => s.id === window.appState.currentSheetId);
-        const sheetName = currentSheet ? currentSheet.name : "產能分析圖表";
-
+        let totalChartsExported = 0;
         let pageAdded = false;
 
-        for (let i = 0; i < chartElements.length; i++) {
-          const elem = chartElements[i];
-          const btn = elem.querySelector('.export-btn');
-          if (btn) btn.style.display = 'none';
+        // 迴圈遍歷所有工作表
+        for (let sIdx = 0; sIdx < sheets.length; sIdx++) {
+          const sheet = sheets[sIdx];
+          // 切換至該工作表並重新渲染以載入對應圖表DOM
+          window.appState.currentSheetId = sheet.id;
+          renderApp();
 
-          const canvas = await html2canvas(elem, {
-            scale: 2.5,
-            useCORS: true,
-            backgroundColor: '#ffffff'
-          });
+          // 等待 DOM 與 Chart.js 繪製完成
+          await new Promise(resolve => setTimeout(resolve, 300));
 
-          if (btn) btn.style.display = '';
+          const chartElements = document.querySelectorAll('.exportable-chart-card');
+          for (let cIdx = 0; cIdx < chartElements.length; cIdx++) {
+            const elem = chartElements[cIdx];
+            const btn = elem.querySelector('.export-btn');
+            if (btn) btn.style.display = 'none';
 
-          const imgData = canvas.toDataURL('image/jpeg', 0.95);
-          const imgProps = pdf.getImageProperties(imgData);
-          const margin = 10;
-          const printWidth = pdfWidth - (margin * 2);
-          const printHeight = (imgProps.height * printWidth) / imgProps.width;
+            const canvas = await html2canvas(elem, {
+              scale: 2.2,
+              useCORS: true,
+              backgroundColor: '#ffffff'
+            });
 
-          if (pageAdded) {
-            pdf.addPage();
+            if (btn) btn.style.display = '';
+
+            const imgData = canvas.toDataURL('image/jpeg', 0.92);
+            const imgProps = pdf.getImageProperties(imgData);
+            const margin = 10;
+            const printWidth = pdfWidth - (margin * 2);
+            const printHeight = (imgProps.height * printWidth) / imgProps.width;
+
+            if (pageAdded) {
+              pdf.addPage();
+            }
+
+            // 安全英文字首與頁籤標題，確保完全不發生亂碼
+            pdf.setFont("helvetica", "bold");
+            pdf.setFontSize(10);
+            pdf.setTextColor(60, 60, 60);
+            pdf.text(`[Sheet: ${sheet.name}] Chart #${totalChartsExported + 1}`, margin, 8);
+
+            let yPos = 12;
+            if (printHeight > pdfHeight - 20) {
+              pdf.addImage(imgData, 'JPEG', margin, yPos, printWidth, pdfHeight - 20);
+            } else {
+              pdf.addImage(imgData, 'JPEG', margin, yPos, printWidth, printHeight);
+            }
+
+            pageAdded = true;
+            totalChartsExported++;
           }
+        }
 
-          // 使用標準英文/數字標題於 PDF 頁籤頂端，中文圖表內容則完整由畫布渲染確保不亂碼
-          pdf.setFont("helvetica", "bold");
-          pdf.setFontSize(11);
-          pdf.text(`[Page ${i + 1}/${chartElements.length}] ${sheetName} Analysis Chart`, margin, 10);
-          
-          let yPos = 14;
-          if (printHeight > pdfHeight - 20) {
-            pdf.addImage(imgData, 'JPEG', margin, yPos, printWidth, pdfHeight - 20);
-          } else {
-            pdf.addImage(imgData, 'JPEG', margin, yPos, printWidth, printHeight);
-          }
+        // 還原原本使用者所在的頁面
+        window.appState.currentSheetId = originalSheetId;
+        renderApp();
 
-          pageAdded = true;
+        if (totalChartsExported === 0) {
+          return alert("系統中找不到任何可匯出的圖表！");
         }
 
         const dateStr = new Date().toISOString().slice(0, 10);
-        pdf.save(`MFG_${sheetName}_Charts_${dateStr}.pdf`);
+        pdf.save(`MFG_All_Sheets_Charts_${dateStr}.pdf`);
 
       } catch (err) {
-        console.error("PDF 匯出失敗：", err);
+        console.error("跨頁面 PDF 匯出失敗：", err);
+        // 確保發生錯誤時也能還原畫面
+        window.appState.currentSheetId = originalSheetId;
+        renderApp();
         alert("匯出 PDF 時發生錯誤：" + err.message);
       }
     };

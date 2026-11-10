@@ -19,8 +19,10 @@
   <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js" defer></script>
   <!-- SheetJS (Excel 匯入/匯出) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
-  <!-- html2canvas (圖表匯出 PNG) -->
+  <!-- html2canvas (圖表截圖) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
+  <!-- jsPDF (PDF 匯出支援) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" defer></script>
   <!-- FontAwesome -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <!-- Firebase SDK (Compat) -->
@@ -55,7 +57,7 @@
     </div>
   </div>
 
-  <!-- 2. 主專案內容區塊 (未登入前預設隱藏 hidden) -->
+  <!-- 2. 主專案內容區塊 -->
   <div id="app-container" class="hidden flex-col min-h-screen">
     <!-- 主導覽列 -->
     <header class="bg-white shadow-sm border-b px-6 py-4 flex justify-between items-center flex-wrap gap-4">
@@ -71,7 +73,13 @@
           <span>上次更新日期時間：</span><span id="last-update-time-text" class="font-medium text-slate-700">讀取中...</span>
         </div>
 
-        <div class="flex items-center space-x-3">
+        <div class="flex items-center space-x-3 flex-wrap gap-y-2">
+          <!-- 一鍵匯出所有頁面圖表成 PDF 功能 -->
+          <button onclick="window.exportAllChartsToPDF()" class="bg-rose-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-rose-700 transition flex items-center space-x-1.5 shadow-sm">
+            <i class="fa-solid fa-file-pdf text-xs"></i>
+            <span>匯出所有圖表為PDF</span>
+          </button>
+
           <!-- 一鍵匯出所有工作表按鈕 -->
           <button onclick="window.exportAllSheetsToExcel()" class="bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-emerald-700 transition flex items-center space-x-1.5 shadow-sm">
             <i class="fa-solid fa-file-export text-xs"></i>
@@ -138,10 +146,10 @@
       sheets: [
         {
           id: 'sheet_1',
-          name: '產值分析',
+          name: '累積產值與同期比較',
           columns: [
-            { key: 'category', title: '類別' },
-            { key: 'month', title: '月份' },
+            { key: 'category', title: 'category' },
+            { key: 'month', title: 'month' },
             { key: '2023', title: '2023' },
             { key: '2024', title: '2024' },
             { key: '2025', title: '2025' },
@@ -151,7 +159,7 @@
         },
         {
           id: 'sheet_2',
-          name: '線上WIP',
+          name: '線上即時WIP',
           columns: [
             { key: 'category', title: '類別' },
             { key: 'May-26', title: 'May-26' },
@@ -172,7 +180,7 @@
         },
         {
           id: 'sheet_3',
-          name: '石墨複合材占比',
+          name: '石墨複材占比',
           columns: [
             { key: 'category', title: '類別' },
             { key: 'm1', title: 'May-25' },
@@ -188,13 +196,36 @@
 
     const localCachedState = localStorage.getItem('mfg_app_state_cache');
     window.appState = localCachedState ? JSON.parse(localCachedState) : defaultState;
-    // 每次重新整理或開啟頁面，強制切換至第一個工作表
     if (window.appState && window.appState.sheets && window.appState.sheets.length > 0) {
       window.appState.currentSheetId = window.appState.sheets[0].id;
     }
 
     window.isAuthorizedEditor = false;
     window.chartInstances = {};
+
+    // 格式輔助工具
+    const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+    window.formatDateToJan23 = function(val) {
+      if (!val) return val;
+      if (typeof val === 'number') {
+        let d = XLSX.SSF.parse_date_code(val);
+        if (d) {
+          let mStr = monthNames[d.m - 1] || 'Jan';
+          let yrStr = String(d.y).slice(-2);
+          return `${mStr}-${yrStr}`;
+        }
+      }
+      let str = String(val).trim();
+      let match = str.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
+      if (match) {
+        let mIdx = parseInt(match[2], 10) - 1;
+        let mStr = monthNames[mIdx] || 'Jan';
+        let yrStr = match[1].slice(-2);
+        return `${mStr}-${yrStr}`;
+      }
+      return val;
+    };
 
     window.formatDateTime = function(isoString) {
       if (!isoString) return '尚無更新紀錄';
@@ -215,7 +246,6 @@
       }
     };
 
-    // Firebase 身分認證監聽：必須登入才能看到與操作系統
     auth.onAuthStateChanged(user => {
       const modal = document.getElementById('auth-modal');
       const container = document.getElementById('app-container');
@@ -285,7 +315,6 @@
         const val = snapshot.val();
         if (val && val.sheets && val.sheets.length > 0) {
           window.appState = val;
-          // 重整載入時強制選取第一個工作表
           window.appState.currentSheetId = val.sheets[0].id;
           localStorage.setItem('mfg_app_state_cache', JSON.stringify(window.appState));
         } else {
@@ -301,7 +330,6 @@
           if (liveVal && liveVal.sheets && liveVal.sheets.length > 0) {
             const currentTabId = window.appState.currentSheetId || liveVal.sheets[0].id;
             window.appState = liveVal;
-            // 保持當前正在查看的工作表，若無則預設第一個
             window.appState.currentSheetId = liveVal.sheets.some(s => s.id === currentTabId) ? currentTabId : liveVal.sheets[0].id;
             localStorage.setItem('mfg_app_state_cache', JSON.stringify(window.appState));
             window.updateTimeDisplay();
@@ -315,7 +343,6 @@
       });
     }
 
-    // 核心渲染與工作表操作
     window.renderApp = function() {
       renderSheetsTabs();
       renderTable();
@@ -488,7 +515,6 @@
       autoSaveToFirebase();
     };
 
-    // 圖表與熱力表引擎
     function renderCharts() {
       const container = document.getElementById('charts-container');
       container.innerHTML = '';
@@ -501,7 +527,7 @@
 
         chartIds.forEach((id, idx) => {
           const wrapper = document.createElement('div');
-          wrapper.className = 'bg-white p-5 rounded-xl shadow-sm border flex flex-col';
+          wrapper.className = 'bg-white p-5 rounded-xl shadow-sm border flex flex-col exportable-chart-card';
           wrapper.id = `export-area-${id}`;
           wrapper.innerHTML = `
             <div class="flex justify-between items-center mb-4">
@@ -519,7 +545,7 @@
 
       } else if (sheetIndex === 1) {
         const wrapper = document.createElement('div');
-        wrapper.className = 'bg-white p-6 rounded-xl shadow-sm border flex flex-col md:col-span-2';
+        wrapper.className = 'bg-white p-6 rounded-xl shadow-sm border flex flex-col md:col-span-2 exportable-chart-card';
         wrapper.id = `export-area-sheet2-heatmap`;
         wrapper.innerHTML = `
           <div class="flex justify-between items-center mb-4">
@@ -537,7 +563,7 @@
 
       } else if (sheetIndex === 2) {
         const wrapper = document.createElement('div');
-        wrapper.className = 'bg-white p-5 rounded-xl shadow-sm border flex flex-col md:col-span-2';
+        wrapper.className = 'bg-white p-5 rounded-xl shadow-sm border flex flex-col md:col-span-2 exportable-chart-card';
         wrapper.id = `export-area-sheet3`;
         wrapper.innerHTML = `
           <div class="flex justify-between items-center mb-4">
@@ -556,7 +582,7 @@
 
     function parseNum(val) {
       if (val === undefined || val === null || val === '') return 0;
-      let s = String(val).replace(/,/g, '');
+      let s = String(val).replace(/,/g, '').replace(/%/g, '');
       let n = parseFloat(s);
       return isNaN(n) ? 0 : n;
     }
@@ -846,7 +872,7 @@
       });
     }
 
-    // 4. 一鍵匯出所有工作表功能
+    // 匯出 Excel (含格式轉換與通用格式寫入)
     window.exportAllSheetsToExcel = function() {
       try {
         if (typeof XLSX === 'undefined') return alert('SheetJS 尚未載入完成！');
@@ -856,17 +882,73 @@
 
         const wb = XLSX.utils.book_new();
 
-        window.appState.sheets.forEach(sheet => {
+        window.appState.sheets.forEach((sheet, sheetIdx) => {
+          const wsData = [];
           const headers = (sheet.columns || []).map(c => c.title);
-          const rowsData = (sheet.data || []).map(row => {
-            const obj = {};
-            (sheet.columns || []).forEach(c => {
-              obj[c.title] = row[c.key] !== undefined ? row[c.key] : '';
+          wsData.push(headers);
+
+          (sheet.data || []).forEach(row => {
+            const rowArr = [];
+            (sheet.columns || []).forEach((c) => {
+              let val = row[c.key] !== undefined ? row[c.key] : '';
+              let keyLower = String(c.key).toLowerCase();
+              let titleLower = String(c.title).toLowerCase();
+              
+              // 日期處理：轉成 Jan-23 格式
+              if (titleLower.includes('date') || titleLower.includes('日期') || titleLower.includes('month') || titleLower.includes('月份')) {
+                val = window.formatDateToJan23(val);
+              }
+              rowArr.push(val);
             });
-            return obj;
+            wsData.push(rowArr);
           });
 
-          const ws = XLSX.utils.json_to_sheet(rowsData, { header: headers });
+          const ws = XLSX.utils.aoa_to_sheet(wsData);
+
+          // 儲存格層級格式化修訂
+          const range = XLSX.utils.decode_range(ws['!ref']);
+          for (let R = range.s.r + 1; R <= range.e.r; ++R) {
+            for (let C = range.s.c; C <= range.e.c; ++C) {
+              const cellRef = XLSX.utils.encode_cell({ r: R, c: C });
+              if (!ws[cellRef]) continue;
+
+              const colKey = String(sheet.columns[C]?.key || '').toLowerCase();
+              const colTitle = String(sheet.columns[C]?.title || '').toLowerCase();
+              let cellValue = ws[cellRef].v;
+
+              // 需求 3, 4, 5: 通用格式強制設定
+              let forceGeneral = false;
+              if (sheetIdx === 0 && (colKey === 'category' || colKey === 'month' || colTitle.includes('category') || colTitle.includes('類別') || colTitle.includes('month') || colTitle.includes('月份'))) {
+                forceGeneral = true;
+              } else if (sheetIdx === 1 && (colKey === 'category' || colTitle.includes('類別') || colTitle.includes('category'))) {
+                forceGeneral = true;
+              } else if (sheetIdx === 2 && (colKey === 'category' || colTitle.includes('類別') || colTitle.includes('category'))) {
+                forceGeneral = true;
+              }
+
+              if (forceGeneral) {
+                ws[cellRef].t = 's';
+                ws[cellRef].z = '@'; // 通用/文字格式
+                ws[cellRef].v = String(cellValue);
+              } else {
+                // 數值與百分比格式設定
+                let strVal = String(cellValue).trim();
+                if (colTitle.includes('%') || colTitle.includes('占比') || colTitle.includes('百分比') || strVal.endsWith('%')) {
+                  let num = parseFloat(strVal.replace(/%/g, ''));
+                  if (!isNaN(num)) {
+                    ws[cellRef].t = 'n';
+                    ws[cellRef].v = strVal.endsWith('%') ? num / 100 : num;
+                    ws[cellRef].z = '0.00%'; // 百分比, 到小數點第二位
+                  }
+                } else if (!isNaN(parseFloat(strVal.replace(/,/g, ''))) && isFinite(strVal.replace(/,/g, ''))) {
+                  ws[cellRef].t = 'n';
+                  ws[cellRef].v = Math.round(parseFloat(strVal.replace(/,/g, '')));
+                  ws[cellRef].z = '#,##0'; // 數值格式, 小數點0位
+                }
+              }
+            }
+          }
+
           XLSX.utils.book_append_sheet(wb, ws, sheet.name);
         });
 
@@ -878,7 +960,7 @@
       }
     };
 
-    // 5. 一鍵匯入所有相符工作表功能
+    // 匯入 Excel
     window.importAllSheetsFromExcel = async function(event) {
       if (!window.isAuthorizedEditor) { alert("需要管理者權限才能匯入！"); return; }
       const file = event.target.files[0];
@@ -888,29 +970,44 @@
       reader.onload = async function(e) {
         try {
           const data = new Uint8Array(e.target.result);
-          const workbook = XLSX.read(data, { type: 'array' });
+          const workbook = XLSX.read(data, { type: 'array', cellDates: true, cellText: false });
           let matchedCount = 0;
 
           workbook.SheetNames.forEach(sheetName => {
             const targetSheet = window.appState.sheets.find(s => s.name.trim() === sheetName.trim());
             if (targetSheet) {
               const worksheet = workbook.Sheets[sheetName];
-              const json = XLSX.utils.sheet_to_json(worksheet);
+              const json = XLSX.utils.sheet_to_json(worksheet, { header: 1, raw: false });
               
               if (json.length > 0) {
-                const keys = Object.keys(json[0]);
-                const columns = keys.map((k, idx) => ({
-                  key: idx === 0 ? 'category' : (idx === 1 && k.toLowerCase().includes('month') ? 'month' : 'col_' + idx),
-                  title: k
+                const rawHeaders = json[0];
+                const columns = rawHeaders.map((k, idx) => ({
+                  key: idx === 0 ? 'category' : (idx === 1 && String(k).toLowerCase().includes('month') ? 'month' : 'col_' + idx),
+                  title: String(k)
                 }));
 
-                const sheetData = json.map(row => {
+                const sheetData = [];
+                for (let r = 1; r < json.length; r++) {
+                  let row = json[r];
+                  if (!row || row.length === 0) continue;
                   let rObj = {};
-                  keys.forEach((k, idx) => {
-                    rObj[columns[idx].key] = row[k];
+                  columns.forEach((col, idx) => {
+                    let val = row[idx] !== undefined ? row[idx] : '';
+                    let titleLower = col.title.toLowerCase();
+                    
+                    // 日期轉換 Jan-23
+                    if (titleLower.includes('date') || titleLower.includes('日期') || titleLower.includes('month') || titleLower.includes('月份')) {
+                      val = window.formatDateToJan23(val);
+                    } else if (titleLower.includes('%') || titleLower.includes('占比') || titleLower.includes('百分比')) {
+                      let pNum = parseFloat(String(val).replace(/%/g, ''));
+                      if (!isNaN(pNum)) val = (pNum < 1 && pNum > 0 ? (pNum * 100).toFixed(2) + '%' : pNum.toFixed(2) + '%');
+                    } else if (idx > 0 && !isNaN(parseFloat(String(val).replace(/,/g, '')))) {
+                      val = Math.round(parseFloat(String(val).replace(/,/g, '')));
+                    }
+                    rObj[col.key] = val;
                   });
-                  return rObj;
-                });
+                  sheetData.push(rObj);
+                }
 
                 targetSheet.columns = columns;
                 targetSheet.data = sheetData;
@@ -935,6 +1032,7 @@
       reader.readAsArrayBuffer(file);
     };
 
+    // 單張圖表匯出 PNG
     window.exportChartToPNG = function(chartId, title) {
       const element = document.getElementById(`export-area-${chartId}`);
       if (!element) return;
@@ -957,6 +1055,73 @@
         if (btn) btn.style.display = '';
         alert("匯出圖片失敗！");
       });
+    };
+
+    // 需求 6: 一鍵匯出所有頁面圖表成 PDF 功能 (支援中文)
+    window.exportAllChartsToPDF = async function() {
+      try {
+        if (typeof window.jspdf === 'undefined' || typeof html2canvas === 'undefined') {
+          return alert("PDF 匯出模組仍在載入中，請稍後再試！");
+        }
+
+        const { jsPDF } = window.jspdf;
+        const pdf = new jsPDF('p', 'mm', 'a4');
+        const pdfWidth = pdf.internal.pageSize.getWidth();
+        const pdfHeight = pdf.internal.pageSize.getHeight();
+
+        const chartElements = document.querySelectorAll('.exportable-chart-card');
+        if (chartElements.length === 0) {
+          return alert("當前工作表沒有可匯出的圖表！");
+        }
+
+        const currentSheet = window.appState.sheets.find(s => s.id === window.appState.currentSheetId);
+        const sheetName = currentSheet ? currentSheet.name : "產能分析圖表";
+
+        let pageAdded = false;
+
+        for (let i = 0; i < chartElements.length; i++) {
+          const elem = chartElements[i];
+          const btn = elem.querySelector('.export-btn');
+          if (btn) btn.style.display = 'none';
+
+          const canvas = await html2canvas(elem, {
+            scale: 2,
+            useCORS: true,
+            backgroundColor: '#ffffff'
+          });
+
+          if (btn) btn.style.display = '';
+
+          const imgData = canvas.toDataURL('image/jpeg', 0.95);
+          const imgProps = pdf.getImageProperties(imgData);
+          const margin = 10;
+          const printWidth = pdfWidth - (margin * 2);
+          const printHeight = (imgProps.height * printWidth) / imgProps.width;
+
+          if (pageAdded) {
+            pdf.addPage();
+          }
+
+          pdf.setFontSize(14);
+          pdf.text(`${sheetName} - 圖表匯出 (${i + 1}/${chartElements.length})`, margin, 12);
+          
+          let yPos = 18;
+          if (printHeight > pdfHeight - 25) {
+            pdf.addImage(imgData, 'JPEG', margin, yPos, printWidth, pdfHeight - 30);
+          } else {
+            pdf.addImage(imgData, 'JPEG', margin, yPos, printWidth, printHeight);
+          }
+
+          pageAdded = true;
+        }
+
+        const dateStr = new Date().toISOString().slice(0, 10);
+        pdf.save(`${sheetName}_圖表總表_${dateStr}.pdf`);
+
+      } catch (err) {
+        console.error("PDF 匯出失敗：", err);
+        alert("匯出 PDF 時發生錯誤：" + err.message);
+      }
     };
   </script>
 </body>

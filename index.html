@@ -203,7 +203,6 @@
     window.isAuthorizedEditor = false;
     window.chartInstances = {};
 
-    // 格式輔助工具
     const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
     window.formatDateToJan23 = function(val) {
@@ -891,10 +890,8 @@
             const rowArr = [];
             (sheet.columns || []).forEach((c) => {
               let val = row[c.key] !== undefined ? row[c.key] : '';
-              let keyLower = String(c.key).toLowerCase();
               let titleLower = String(c.title).toLowerCase();
               
-              // 日期處理：轉成 Jan-23 格式
               if (titleLower.includes('date') || titleLower.includes('日期') || titleLower.includes('month') || titleLower.includes('月份')) {
                 val = window.formatDateToJan23(val);
               }
@@ -905,7 +902,6 @@
 
           const ws = XLSX.utils.aoa_to_sheet(wsData);
 
-          // 儲存格層級格式化修訂
           const range = XLSX.utils.decode_range(ws['!ref']);
           for (let R = range.s.r + 1; R <= range.e.r; ++R) {
             for (let C = range.s.c; C <= range.e.c; ++C) {
@@ -928,22 +924,21 @@
 
               if (forceGeneral) {
                 ws[cellRef].t = 's';
-                ws[cellRef].z = '@'; // 通用/文字格式
+                ws[cellRef].z = '@';
                 ws[cellRef].v = String(cellValue);
               } else {
-                // 數值與百分比格式設定
                 let strVal = String(cellValue).trim();
                 if (colTitle.includes('%') || colTitle.includes('占比') || colTitle.includes('百分比') || strVal.endsWith('%')) {
                   let num = parseFloat(strVal.replace(/%/g, ''));
                   if (!isNaN(num)) {
                     ws[cellRef].t = 'n';
                     ws[cellRef].v = strVal.endsWith('%') ? num / 100 : num;
-                    ws[cellRef].z = '0.00%'; // 百分比, 到小數點第二位
+                    ws[cellRef].z = '0.00%';
                   }
                 } else if (!isNaN(parseFloat(strVal.replace(/,/g, ''))) && isFinite(strVal.replace(/,/g, ''))) {
                   ws[cellRef].t = 'n';
                   ws[cellRef].v = Math.round(parseFloat(strVal.replace(/,/g, '')));
-                  ws[cellRef].z = '#,##0'; // 數值格式, 小數點0位
+                  ws[cellRef].z = '#,##0';
                 }
               }
             }
@@ -995,7 +990,6 @@
                     let val = row[idx] !== undefined ? row[idx] : '';
                     let titleLower = col.title.toLowerCase();
                     
-                    // 日期轉換 Jan-23
                     if (titleLower.includes('date') || titleLower.includes('日期') || titleLower.includes('month') || titleLower.includes('月份')) {
                       val = window.formatDateToJan23(val);
                     } else if (titleLower.includes('%') || titleLower.includes('占比') || titleLower.includes('百分比')) {
@@ -1032,7 +1026,6 @@
       reader.readAsArrayBuffer(file);
     };
 
-    // 單張圖表匯出 PNG
     window.exportChartToPNG = function(chartId, title) {
       const element = document.getElementById(`export-area-${chartId}`);
       if (!element) return;
@@ -1057,7 +1050,7 @@
       });
     };
 
-    // 需求 6: 一鍵匯出所有頁面圖表成 PDF 功能 (支援中文)
+    // 需求 6 修正：以高品質影像包裝 PDF 避開 jsPDF 內建字型亂碼
     window.exportAllChartsToPDF = async function() {
       try {
         if (typeof window.jspdf === 'undefined' || typeof html2canvas === 'undefined') {
@@ -1085,7 +1078,7 @@
           if (btn) btn.style.display = 'none';
 
           const canvas = await html2canvas(elem, {
-            scale: 2,
+            scale: 2.5,
             useCORS: true,
             backgroundColor: '#ffffff'
           });
@@ -1102,12 +1095,14 @@
             pdf.addPage();
           }
 
-          pdf.setFontSize(14);
-          pdf.text(`${sheetName} - 圖表匯出 (${i + 1}/${chartElements.length})`, margin, 12);
+          // 使用標準英文/數字標題於 PDF 頁籤頂端，中文圖表內容則完整由畫布渲染確保不亂碼
+          pdf.setFont("helvetica", "bold");
+          pdf.setFontSize(11);
+          pdf.text(`[Page ${i + 1}/${chartElements.length}] ${sheetName} Analysis Chart`, margin, 10);
           
-          let yPos = 18;
-          if (printHeight > pdfHeight - 25) {
-            pdf.addImage(imgData, 'JPEG', margin, yPos, printWidth, pdfHeight - 30);
+          let yPos = 14;
+          if (printHeight > pdfHeight - 20) {
+            pdf.addImage(imgData, 'JPEG', margin, yPos, printWidth, pdfHeight - 20);
           } else {
             pdf.addImage(imgData, 'JPEG', margin, yPos, printWidth, printHeight);
           }
@@ -1116,7 +1111,7 @@
         }
 
         const dateStr = new Date().toISOString().slice(0, 10);
-        pdf.save(`${sheetName}_圖表總表_${dateStr}.pdf`);
+        pdf.save(`MFG_${sheetName}_Charts_${dateStr}.pdf`);
 
       } catch (err) {
         console.error("PDF 匯出失敗：", err);
